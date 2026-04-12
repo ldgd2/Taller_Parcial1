@@ -1,0 +1,113 @@
+"""
+Script de datos iniciales (Seed) — Ciclo 1
+Crea los registros de catálogo base que el sistema necesita para funcionar:
+  - Estados
+  - Prioridades
+  - Categorías de Problema
+  - Un taller de prueba
+  - Un técnico de prueba
+  - Un cliente de prueba
+"""
+import asyncio
+from sqlalchemy import text
+from app.core.database import AsyncSessionLocal
+from app.core.security import hash_password
+from app.models.estado import Estado
+from app.models.prioridad import Prioridad
+from app.models.categoria_problema import CategoriaProblema
+from app.models.taller import Taller
+from app.models.tecnico import Tecnico
+from app.models.cliente import Cliente
+from app.models.vehiculo import Vehiculo
+
+
+async def seed():
+    async with AsyncSessionLocal() as db:
+        # ── Estados ──────────────────────────────────────────────
+        estados = [
+            Estado(nombre="PENDIENTE",   descripcion="Solicitud creada, en espera de asignación"),
+            Estado(nombre="EN_PROCESO",  descripcion="Técnico en camino o atendiendo"),
+            Estado(nombre="ATENDIDO",    descripcion="Servicio completado"),
+            Estado(nombre="CANCELADO",   descripcion="Solicitud cancelada"),
+        ]
+        for e in estados:
+            result = await db.execute(
+                text("SELECT 1 FROM estado WHERE nombre = :n"), {"n": e.nombre}
+            )
+            if not result.fetchone():
+                db.add(e)
+
+        # ── Prioridades ───────────────────────────────────────────
+        prioridades = [
+            Prioridad(descripcion="BAJA"),
+            Prioridad(descripcion="MEDIA"),
+            Prioridad(descripcion="ALTA"),
+        ]
+        result = await db.execute(text("SELECT COUNT(*) FROM prioridad"))
+        if result.scalar() == 0:
+            db.add_all(prioridades)
+
+        # ── Categorías ────────────────────────────────────────────
+        categorias = [
+            CategoriaProblema(descripcion="Batería"),
+            CategoriaProblema(descripcion="Llanta"),
+            CategoriaProblema(descripcion="Choque"),
+            CategoriaProblema(descripcion="Motor"),
+            CategoriaProblema(descripcion="Otros"),
+        ]
+        result = await db.execute(text("SELECT COUNT(*) FROM categoria_problema"))
+        if result.scalar() == 0:
+            db.add_all(categorias)
+
+        # ── Taller de prueba ──────────────────────────────────────
+        result = await db.execute(text("SELECT 1 FROM taller WHERE cod = 'TAL001'"))
+        if not result.fetchone():
+            taller = Taller(
+                cod="TAL001",
+                nombre="Taller Central Demo",
+                direccion="Av. Principal 123, Santa Cruz",
+                estado="ACTIVO",
+            )
+            db.add(taller)
+            await db.flush()
+
+            # ── Técnico de prueba ─────────────────────────────────
+            tecnico = Tecnico(
+                nombre="Carlos Flores",
+                correo="tecnico@demo.com",
+                contrasena=hash_password("tecnico123"),
+                telefono="70000001",
+                idTaller="TAL001",
+            )
+            db.add(tecnico)
+
+        # ── Cliente de prueba ─────────────────────────────────────
+        result = await db.execute(
+            text("SELECT 1 FROM cliente WHERE correo = 'cliente@demo.com'")
+        )
+        if not result.fetchone():
+            cliente = Cliente(
+                nombre="Ana Pérez",
+                correo="cliente@demo.com",
+                contrasena=hash_password("cliente123"),
+            )
+            db.add(cliente)
+            await db.flush()
+
+            vehiculo = Vehiculo(
+                marca="Toyota",
+                modelo="Corolla",
+                anio=2020,
+                idCliente=cliente.id,
+            )
+            db.add(vehiculo)
+
+        await db.commit()
+        print("✅ Seed completado exitosamente.")
+        print("\nCredenciales de prueba:")
+        print("  Cliente  → correo: cliente@demo.com  | pass: cliente123  | rol: cliente")
+        print("  Técnico  → correo: tecnico@demo.com  | pass: tecnico123  | rol: tecnico")
+
+
+if __name__ == "__main__":
+    asyncio.run(seed())
