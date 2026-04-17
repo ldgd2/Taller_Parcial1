@@ -10,6 +10,7 @@ class Cliente(Base):
     nombre = Column(String(255), nullable=False)
     correo = Column(String(255), nullable=False, unique=True, index=True)
     contrasena = Column("contraseña", String(255), nullable=False)
+    estado = Column(String(20), nullable=False, server_default="ACTIVO", default="ACTIVO")
 
     # Relaciones
     vehiculos = relationship("Vehiculo", back_populates="cliente")

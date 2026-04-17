@@ -1,6 +1,7 @@
 import os
 import subprocess
 import platform
+import sys
 
 HAS_RICH = False
 try:
@@ -35,17 +36,27 @@ def add_subparser(parser):
     parser_migrate.add_argument("-m", "--message", required=True, help="Mensaje para documentar la migracion")
     
     subparsers.add_parser("upgrade", help="Aplica las migraciones Alembic pendientes a la Base de Datos")
+    
+    # Nuevos comandos del paquete db_tools
+    subparsers.add_parser("reset", help="[PELIGRO] Destruye el esquema y recrea BD desde Head de Alembic")
+    subparsers.add_parser("populate", help="Extendido: Siembra proceduralmente la DB usando Faker (N Talleres y M Clientes)")
+    
+    parser_disable_c = subparsers.add_parser("disable-cliente", help="Desactiva logicamente a un cliente por CLI")
+    parser_disable_c.add_argument("correo", help="Correo del cliente a desactivar")
+    
+    parser_disable_t = subparsers.add_parser("disable-taller", help="Desactiva logicamente a un taller por CLI")
+    parser_disable_t.add_argument("cod", help="Codigo del Taller a desactivar (ej. TAL001)")
 
 def execute(args):
     target = args.target
 
-    is_windows = platform.system() == "Windows"
-    python_cmd = os.path.join(".venv", "Scripts", "python") if is_windows else os.path.join(".venv", "bin", "python")
-    alembic_cmd = os.path.join(".venv", "Scripts", "alembic") if is_windows else os.path.join(".venv", "bin", "alembic")
+    python_cmd = sys.executable
+    alembic_exe_list = [sys.executable, "-m", "alembic"]
 
     os.chdir("backend")
     
     try:
+        
         if target == "init":
             do_status("Inicializando Base de Datos (SQLAlchemy)...", "Inicializando Base de Datos (SQLAlchemy)...", 
                       lambda: subprocess.run([python_cmd, "init_db.py"], check=True))
@@ -59,15 +70,99 @@ def execute(args):
         elif target == "migrate":
             msg = args.message
             do_status(f"Generando archivo de migracion: '{msg}'...", f"Generando archivo de migracion: '{msg}'...", 
-                      lambda: subprocess.run([alembic_cmd, "revision", "--autogenerate", "-m", msg], check=True))
+                      lambda: subprocess.run([*alembic_exe_list, "revision", "--autogenerate", "-m", msg], check=True))
             cprint("[bold green]Migracion autogenerada exitosamente. Revisa la carpeta backend/alembic/versions.[/bold green]", "Migracion autogenerada exitosamente.")
             
         elif target == "upgrade":
             do_status("Aplicando migraciones estructurales a Head...", "Aplicando migraciones estructurales a Head...", 
-                      lambda: subprocess.run([alembic_cmd, "upgrade", "head"], check=True))
+                      lambda: subprocess.run([*alembic_exe_list, "upgrade", "head"], check=True))
             cprint("[bold green]Base de datos actualizada a la version Head.[/bold green]", "Base de datos actualizada a la version Head.")
+
+        # ---- Logica conectada a scripts/db_tools ----
+        elif target == "reset":
+            do_status("Reseteando BD (Drop Cascade)...", "Borrando esquemas...", 
+                      lambda: subprocess.run([python_cmd, os.path.join("..", "scripts", "db_tools", "reset.py")], check=True))
+            cprint("[bold yellow]Iniciando Upgrade asincrono...[/bold yellow]", "Haciendo Upgrade...")
+            subprocess.run([*alembic_exe_list, "upgrade", "head"], check=True)
+            cprint("[bold green]La base de datos quedo limpia y con migraciones aplicadas.[/bold green]", "La base de ha reseteado a 0 exitosamente.")
+
+        elif target == "populate_exec":
+            cmd = [
+                python_cmd, 
+                os.path.join("..", "scripts", "db_tools", "procedural_seed.py"),
+                "--talleres", str(args.talleres),
+                "--clientes", str(args.clientes),
+                "--emergencias", str(args.emergencias)
+            ]
+            if args.real_ia:
+                cmd.append("--real-ia")
+                
+            do_status("Generando informacion ficticia + IA Real...", "Sembrando procedimentalmente...", 
+                      lambda: subprocess.run(cmd, check=True))
+            cprint("[bold green]Poblado Completado con exito.[/bold green]", "Poblado Completado.")
+            
+        elif target == "disable-cliente":
+            subprocess.run([python_cmd, "-c", f"import asyncio; import sys; sys.path.append('..'); from scripts.db_tools.crud import desactivar_cliente; asyncio.run(desactivar_cliente('{args.correo}'))"])
+            
+        elif target == "disable-taller":
+            subprocess.run([python_cmd, "-c", f"import asyncio; import sys; sys.path.append('..'); from scripts.db_tools.crud import desactivar_taller; asyncio.run(desactivar_taller('{args.cod}'))"])
+
             
     except subprocess.CalledProcessError as e:
         cprint(f"\n[bold red][ERROR] Al ejecutar el comando en DB:[/bold red] {e}", f"\n[ERROR] Al ejecutar el comando en DB: {e}")
     finally:
         os.chdir("..")
+
+def interactive_menu():
+    """Interfaz interactiva delegada para Base de Datos."""
+    import questionary
+    import argparse
+    
+    opt = questionary.select(
+        "Operación de DB:",
+        choices=["Init (Tablas iniciales)", "Seed (Datos base)", "Migrate (Nueva versión)", "Upgrade (Aplicar cambios)", "Reset (Limpiar y Recrear)", "Populate (Data Falsa)", "Volver"]
+    ).ask()
+    
+    if opt == "Volver" or opt is None:
+        return
+        
+    target = opt.split()[0].lower()
+    msg = None
+    
+    if target == "migrate":
+        msg = questionary.text("Mensaje de la migración:").ask()
+    
+    if target == "populate":
+        sub_opt = questionary.select(
+            "Tipo de Poblado:",
+            choices=[
+                "Básico (Pocos datos)",
+                "Aleatorio (Rango variable)",
+                "Interactivo (Tabla por tabla)",
+                "Solo Emergencias + IA Real",
+                "Poblado Total (Hardcore - IA Masiva)",
+                "Volver"
+            ]
+        ).ask()
+        
+        if sub_opt == "Volver" or sub_opt is None: return
+        
+        if sub_opt == "Básico (Pocos datos)":
+            execute(argparse.Namespace(target="populate_exec", talleres=3, clientes=5, emergencias=0, real_ia=False))
+        elif sub_opt == "Aleatorio (Rango variable)":
+            import random
+            execute(argparse.Namespace(target="populate_exec", talleres=random.randint(1,5), clientes=random.randint(5,15), emergencias=random.randint(1,3), real_ia=True))
+        elif sub_opt == "Interactivo (Tabla por tabla)":
+            t = int(questionary.text("¿Cuántos Talleres?", default="5").ask() or 5)
+            c = int(questionary.text("¿Cuántos Clientes?", default="10").ask() or 10)
+            e = int(questionary.text("¿Cuántas Emergencias (+IA)?", default="2").ask() or 2)
+            execute(argparse.Namespace(target="populate_exec", talleres=t, clientes=c, emergencias=e, real_ia=True))
+        elif sub_opt == "Solo Emergencias + IA Real":
+            e = int(questionary.text("¿Cuántas Emergencias a procesar?", default="3").ask() or 3)
+            execute(argparse.Namespace(target="populate_exec", talleres=0, clientes=0, emergencias=e, real_ia=True))
+        elif sub_opt == "Poblado Total (Hardcore - IA Masiva)":
+            execute(argparse.Namespace(target="populate_exec", talleres=5, clientes=15, emergencias=10, real_ia=True))
+    else:
+        execute(argparse.Namespace(target=target, message=msg))
+
+    input("\nPresiona Enter para continuar...")

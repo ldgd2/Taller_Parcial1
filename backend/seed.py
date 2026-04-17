@@ -9,8 +9,10 @@ Crea los registros de catálogo base que el sistema necesita para funcionar:
   - Un cliente de prueba
 """
 import asyncio
+import platform
+import warnings
 from sqlalchemy import text
-from app.core.database import AsyncSessionLocal
+from app.core.database import AsyncSessionLocal, engine, Base
 from app.core.security import hash_password
 from app.models.estado import Estado
 from app.models.prioridad import Prioridad
@@ -20,12 +22,25 @@ from app.models.tecnico import Tecnico
 from app.models.cliente import Cliente
 from app.models.vehiculo import Vehiculo
 
+# Silenciar el aviso de deprecación de loop policy en Python 3.14+
+warnings.filterwarnings("ignore", category=DeprecationWarning)
+
+async def ensure_db_initialized():
+    """Crea las tablas si no existen antes de sembrar."""
+    from init_db import check_and_create_db
+    await check_and_create_db()
+    
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
 
 async def seed():
+    await ensure_db_initialized()
     async with AsyncSessionLocal() as db:
         # ── Estados ──────────────────────────────────────────────
         estados = [
-            Estado(nombre="PENDIENTE",   descripcion="Solicitud creada, en espera de asignación"),
+            Estado(nombre="INICIADA",    descripcion="Reporte sugerido por el usuario, pendiente de análisis IA"),
+            Estado(nombre="PENDIENTE",   descripcion="Solicitud analizada, en espera de asignación de taller"),
+            Estado(nombre="ENVIADA",     descripcion="Notificación enviada al taller para aceptación"),
             Estado(nombre="EN_PROCESO",  descripcion="Técnico en camino o atendiendo"),
             Estado(nombre="ATENDIDO",    descripcion="Servicio completado"),
             Estado(nombre="CANCELADO",   descripcion="Solicitud cancelada"),
@@ -95,6 +110,7 @@ async def seed():
             await db.flush()
 
             vehiculo = Vehiculo(
+                placa="DEMO-123",
                 marca="Toyota",
                 modelo="Corolla",
                 anio=2020,
@@ -103,10 +119,10 @@ async def seed():
             db.add(vehiculo)
 
         await db.commit()
-        print("✅ Seed completado exitosamente.")
+        print("[OK] Seed completado exitosamente.")
         print("\nCredenciales de prueba:")
-        print("  Cliente  → correo: cliente@demo.com  | pass: cliente123  | rol: cliente")
-        print("  Técnico  → correo: tecnico@demo.com  | pass: tecnico123  | rol: tecnico")
+        print("  Cliente  -> correo: cliente@demo.com  | pass: cliente123  | rol: cliente")
+        print("  Tecnico  -> correo: tecnico@demo.com  | pass: tecnico123  | rol: tecnico")
 
 
 if __name__ == "__main__":

@@ -51,26 +51,29 @@ def update_env_variable(filepath, key, new_value):
         f.writelines(lines)
 
 def config_db():
-    env_file = os.path.join("backend", ".env")
+    env_file = ".env"
     if not os.path.exists(env_file):
         cprint("[bold red]Primero debes correr: python taller.py setup env[/bold red]", "Primero debes correr: python taller.py setup env")
         return
         
-    cprint("\n[bold magenta]--- CONFIGURACION BASE DE DATOS POSTGRESQL ---[/bold magenta]", "\n--- CONFIGURACION BASE DE DATOS POSTGRESQL ---")
-    user = process_input("Usuario de PostgreSQL (default: postgres)", "Usuario de PostgreSQL (default: postgres)") or "postgres"
-    password = process_input("Contrasena de PostgreSQL (default: root)", "Contrasena de PostgreSQL (default: root)") or "root"
-    host = process_input("Host (default: localhost)", "Host (default: localhost)") or "localhost"
-    port = process_input("Puerto (default: 5432)", "Puerto (default: 5432)") or "5432"
-    dbname = process_input("Nombre de la DB (default: taller_db)", "Nombre de la DB (default: taller_db)") or "taller_db"
+    cprint("\n[bold magenta]--- CONFIGURACION INDEPENDIENTE DE BASE DE DATOS ---[/bold magenta]", "\n--- CONFIGURACION INDEPENDIENTE DE BASE DE DATOS ---")
+    user = process_input("Usuario (DB_USER, default: postgres)", "Usuario (DB_USER, default: postgres)") or "postgres"
+    password = process_input("Contrasena (DB_PASSWORD, default: root)", "Contrasena (DB_PASSWORD, default: root)") or "root"
+    host = process_input("Host (DB_HOST, default: localhost)", "Host (DB_HOST, default: localhost)") or "localhost"
+    port = process_input("Puerto (DB_PORT, default: 5432)", "Puerto (DB_PORT, default: 5432)") or "5432"
+    dbname = process_input("Nombre DB (DB_NAME, default: taller_db)", "Nombre DB (DB_NAME, default: taller_db)") or "taller_db"
     
-    # asyncpg format: postgresql+asyncpg://user:password@host:port/dbname
-    connection_str = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{dbname}"
+    # Guardamos cada variable por separado para mayor limpieza
+    update_env_variable(env_file, "DB_USER", user)
+    update_env_variable(env_file, "DB_PASSWORD", password)
+    update_env_variable(env_file, "DB_HOST", host)
+    update_env_variable(env_file, "DB_PORT", port)
+    update_env_variable(env_file, "DB_NAME", dbname)
     
-    update_env_variable(env_file, "DATABASE_URL", connection_str)
-    cprint(f"[bold green]Configuracion Guardada: {connection_str}[/bold green]", f"Configuracion Guardada: {connection_str}")
+    cprint(f"[bold green]Configuracion de Base de Datos guardada por componentes.[/bold green]", "Configuracion Guardada.")
 
 def config_jwt():
-    env_file = os.path.join("backend", ".env")
+    env_file = ".env"
     if not os.path.exists(env_file):
         cprint("[bold red]Primero debes correr: python taller.py setup env[/bold red]", "Primero debes correr: python taller.py setup env")
         return
@@ -91,3 +94,20 @@ def execute(args):
         
     if target in ("jwt", "all"):
         config_jwt()
+
+def interactive_menu():
+    """Interfaz interactiva delegada para Config."""
+    import questionary
+    import argparse
+    
+    opt = questionary.select(
+        "Operación de Config:",
+        choices=["DB (Credenciales PostgreSQL)", "JWT (Secret Key)", "All (Configuración completa)", "Volver"]
+    ).ask()
+    
+    if opt == "Volver" or opt is None:
+        return
+        
+    target = opt.split()[0].lower()
+    execute(argparse.Namespace(target=target))
+    input("\nPresiona Enter para continuar...")

@@ -4,6 +4,8 @@ import json
 import os
 import platform
 import subprocess
+import sys
+import argparse
 
 HAS_RICH = False
 try:
@@ -43,6 +45,7 @@ def add_subparser(parser):
     
     subparsers.add_parser("ping", help="Revisa si el servidor FastAPI backend esta respondiendo")
     subparsers.add_parser("frontend", help="Ejecuta ng test")
+    subparsers.add_parser("ia", help="Ejecuta el paquete de test de Inteligencia Artificial (Whisper y OpenRouter)")
 
 def execute(args):
     target = args.target
@@ -91,3 +94,31 @@ def execute(args):
             cprint("[bold red][ERROR] No se encontro 'ng'. Ejecutaste 'python taller.py setup frontend'?[/bold red]", "[ERROR] No se encontro 'ng'. Ejecutaste 'python taller.py setup frontend'?")
         finally:
             os.chdir("..")
+
+    elif target == "ia":
+        cprint("\n[bold magenta]Lanzando Pruebas (Tests) de Inteligencia Artificial...[/bold magenta]", "\nLanzando Pruebas del modulo IA...")
+        
+        sys_exe = sys.executable
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        test_ia_dir = os.path.join(script_dir, "test_ia")
+        
+        panel_print("[cyan]Módulo: Transcripción (faster-whisper)[/cyan]", "Módulo: Whisper Local")
+        subprocess.run([sys_exe, os.path.join(test_ia_dir, "test_whisper.py")])
+        
+        panel_print("[cyan]Módulo: Análisis Inteligente (OpenRouter)[/cyan]", "Módulo: OpenRouter y Pydantic")
+        subprocess.run([sys_exe, os.path.join(test_ia_dir, "test_openrouter.py")])
+
+def interactive_menu():
+    """Interfaz interactiva delegada para Tests."""
+    import questionary
+    opt = questionary.select(
+        "Módulo de Test:",
+        choices=["IA (Whisper/OpenRouter)", "Ping/Health Backend", "Frontend (Unit Tests)", "Volver"]
+    ).ask()
+    
+    if opt == "Volver":
+        return
+        
+    target = "ia" if "IA" in opt else ("ping" if "Ping" in opt else "frontend")
+    execute(argparse.Namespace(target=target))
+    input("\nPresiona Enter para continuar...")

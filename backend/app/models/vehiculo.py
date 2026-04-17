@@ -6,7 +6,7 @@ from app.core.database import Base
 class Vehiculo(Base):
     __tablename__ = "vehiculo"
 
-    id = Column(Integer, primary_key=True, index=True)
+    placa = Column(String(20), primary_key=True, index=True)
     marca = Column(String(100), nullable=False)
     modelo = Column(String(100), nullable=False)
     anio = Column("año", Integer, nullable=False)

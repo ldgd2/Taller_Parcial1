@@ -8,9 +8,11 @@ from datetime import date, time, datetime
 class EmergenciaCreate(BaseModel):
     descripcion: str
     texto_adicional: Optional[str] = None
-    ubicacion: str
+    direccion: str
+    latitud: Optional[float] = None
+    longitud: Optional[float] = None
     hora: time
-    idVehiculo: int
+    placaVehiculo: str
     # idTaller, idPrioridad, idCategoria son asignados por el motor de asignación
 
 
@@ -20,12 +22,15 @@ class EmergenciaOut(BaseModel):
     id: int
     descripcion: str
     texto_adicional: Optional[str]
-    ubicacion: str
+    direccion: str
+    latitud: Optional[float]
+    longitud: Optional[float]
     fecha: date
     hora: time
     idTaller: str
     idPrioridad: int
     idCategoria: int
+    placaVehiculo: str
     estado_actual: Optional[str] = None   # Calculado desde historial
 
     model_config = {"from_attributes": True}

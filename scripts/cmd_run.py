@@ -1,6 +1,7 @@
 import os
 import subprocess
 import platform
+import sys
 
 HAS_RICH = False
 try:
@@ -36,19 +37,31 @@ def add_subparser(parser):
 def execute(args):
     target = args.target
     is_windows = platform.system() == "Windows"
-    
-    python_cmd = os.path.join(".venv", "Scripts", "python") if is_windows else os.path.join(".venv", "bin", "python")
-    uvicorn_cmd = os.path.join("backend", ".venv", "Scripts", "uvicorn") if is_windows else os.path.join("backend", ".venv", "bin", "uvicorn")
+    python_cmd = sys.executable
+    uvicorn_cmd = [sys.executable, "-m", "uvicorn"]
     npm_cmd = "npm.cmd" if is_windows else "npm"
+    
+    # Intentar leer el host del .env para el mensaje
+    app_host = "localhost"
+    try:
+        env_path = ".env"
+        if os.path.exists(env_path):
+            with open(env_path, 'r') as f:
+                for line in f:
+                    if line.startswith("APP_HOST="):
+                        app_host = line.split("=")[1].strip()
+                        break
+    except:
+        pass
 
     if target == "backend":
         panel_print(
-            "[bold cyan]Iniciando Backend (FastAPI)[/bold cyan] en http://localhost:8000\n[dim]Usa Ctrl+C para salir[/dim]",
-            "Iniciando Backend (FastAPI) en http://localhost:8000\nUsa Ctrl+C para salir",
+            f"[bold cyan]Iniciando Backend (FastAPI)[/bold cyan] en http://{app_host}:8000\n[dim]Usa Ctrl+C para salir[/dim]",
+            f"Iniciando Backend (FastAPI) en http://{app_host}:8000\nUsa Ctrl+C para salir",
             "cyan"
         )
         os.chdir("backend")
-        subprocess.run([uvicorn_cmd.replace("backend\\", "").replace("backend/", ""), "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"])
+        subprocess.run([*uvicorn_cmd, "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"])
         os.chdir("..")
 
     elif target == "frontend":
@@ -68,10 +81,10 @@ def execute(args):
     elif target == "all":
         panel_print(
             "[bold green]Iniciando TODO de forma concurrente...[/bold green]\n"
-            "[cyan]Backend[/cyan]:  http://localhost:8000\n"
-            "[magenta]Frontend[/magenta]: http://localhost:4200\n"
+            f"[cyan]Backend[/cyan]:  http://{app_host}:8000\n"
+            f"[magenta]Frontend[/magenta]: http://{app_host}:4200\n"
             "[dim]Sigue los logs de ambos servidores (Ctrl+C para salir)[/dim]",
-            "Iniciando TODO de forma concurrente...\nBackend: http://localhost:8000\nFrontend: http://localhost:4200\nSigue los logs de ambos (Ctrl+C para salir)",
+            f"Iniciando TODO de forma concurrente...\nBackend: http://{app_host}:8000\nFrontend: http://{app_host}:4200\nSigue los logs de ambos (Ctrl+C para salir)",
             "green"
         )
         
@@ -79,7 +92,7 @@ def execute(args):
         
         def run_back():
             os.chdir("backend")
-            subprocess.run([uvicorn_cmd.replace("backend\\", "").replace("backend/", ""), "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"])
+            subprocess.run([*uvicorn_cmd, "main:app", "--reload", "--host", "0.0.0.0", "--port", "8000"])
             
         def run_front():
             os.chdir("frontend")
@@ -96,3 +109,20 @@ def execute(args):
             tf.join()
         except KeyboardInterrupt:
             cprint("\n[bold yellow]Apagando servidores...[/bold yellow]", "\nApagando servidores...")
+
+def interactive_menu():
+    """Interfaz interactiva delegada para Servidores."""
+    import questionary
+    import argparse
+    
+    opt = questionary.select(
+        "Iniciar Servidor:",
+        choices=["Backend (FastAPI)", "Frontend (Angular)", "Ambos (Concurrente)", "Volver"]
+    ).ask()
+    
+    if opt == "Volver" or opt is None:
+        return
+        
+    target = opt.split()[0].lower()
+    execute(argparse.Namespace(target=target))
+    input("\nPresiona Enter para volver...")
