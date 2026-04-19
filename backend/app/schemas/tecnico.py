@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, List
+from app.schemas.catalogos import EspecialidadOut
 
 class TecnicoBase(BaseModel):
     nombre: str
@@ -21,6 +22,7 @@ class TecnicoUpdate(BaseModel):
 class TecnicoOut(TecnicoBase):
     id: int
     estado: str
+    especialidades: List[EspecialidadOut] = []
 
     class Config:
         from_attributes = True

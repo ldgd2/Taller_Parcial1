@@ -40,6 +40,8 @@ def add_subparser(parser):
     # Nuevos comandos del paquete db_tools
     subparsers.add_parser("reset", help="[PELIGRO] Destruye el esquema y recrea BD desde Head de Alembic")
     subparsers.add_parser("populate", help="Extendido: Siembra proceduralmente la DB usando Faker (N Talleres y M Clientes)")
+    subparsers.add_parser("diag_serialization", help="Verifica si los datos de la DB se serializan bien a Pydantic")
+    subparsers.add_parser("fix_specialties", help="Asegura que todos los talleres tengan todas las especialidades (Fix)")
     
     parser_disable_c = subparsers.add_parser("disable-cliente", help="Desactiva logicamente a un cliente por CLI")
     parser_disable_c.add_argument("correo", help="Correo del cliente a desactivar")
@@ -100,6 +102,14 @@ def execute(args):
             do_status("Generando informacion ficticia + IA Real...", "Sembrando procedimentalmente...", 
                       lambda: subprocess.run(cmd, check=True))
             cprint("[bold green]Poblado Completado con exito.[/bold green]", "Poblado Completado.")
+
+        elif target == "diag_serialization":
+            cprint("\n[bold magenta]Iniciando Diagnostico de Datos y Serialización...[/bold magenta]", "\nIniciando Diagnostico...")
+            subprocess.run([python_cmd, os.path.join("..", "scripts", "diag_db_serialization.py")], check=True)
+
+        elif target == "fix_specialties":
+            cprint("\n[bold magenta]Ejecutando Reparación de Especialidades Masiva...[/bold magenta]", "\nEjecutando Reparación...")
+            subprocess.run([python_cmd, os.path.join("..", "scripts", "tool_fix_specialties.py")], check=True)
             
         elif target == "disable-cliente":
             subprocess.run([python_cmd, "-c", f"import asyncio; import sys; sys.path.append('..'); from scripts.db_tools.crud import desactivar_cliente; asyncio.run(desactivar_cliente('{args.correo}'))"])
@@ -118,15 +128,25 @@ def interactive_menu():
     import questionary
     import argparse
     
-    opt = questionary.select(
-        "Operación de DB:",
-        choices=["Init (Tablas iniciales)", "Seed (Datos base)", "Migrate (Nueva versión)", "Upgrade (Aplicar cambios)", "Reset (Limpiar y Recrear)", "Populate (Data Falsa)", "Volver"]
-    ).ask()
+    choices = [
+        "Init (Tablas iniciales)", 
+        "Seed (Datos base)", 
+        "Migrate (Nueva versión)", 
+        "Upgrade (Aplicar cambios)", 
+        "Reset (Limpiar y Recrear)", 
+        "Populate (Data Falsa)", 
+        "Debug Serialización",
+        "Fix Especialidades (Talleres)",
+        "Volver"
+    ]
+    opt = questionary.select("Operación de DB:", choices=choices).ask()
     
     if opt == "Volver" or opt is None:
         return
         
-    target = opt.split()[0].lower()
+    if "Debug Serialización" in opt: target = "diag_serialization"
+    elif "Fix Especialidades" in opt: target = "fix_specialties"
+    else: target = opt.split()[0].lower()
     msg = None
     
     if target == "migrate":

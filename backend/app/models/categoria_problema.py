@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 
@@ -7,3 +8,6 @@ class CategoriaProblema(Base):
 
     id = Column(Integer, primary_key=True)
     descripcion = Column(String(255), nullable=False)
+    idEspecialidad = Column(Integer, ForeignKey("especialidad.id"), nullable=True)
+
+    especialidad = relationship("Especialidad")

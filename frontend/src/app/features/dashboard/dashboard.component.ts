@@ -1,197 +1,189 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router, RouterModule } from '@angular/router';
+import { FormsModule } from '@angular/forms';
 
 // UI
-import { CardComponent } from '../../shared/ui/card/card.component';
-import { ButtonComponent } from '../../shared/ui/button/button.component';
+import { EmergencyCardComponent } from '../../shared/ui/emergency-card/emergency-card.component';
+import { ApiService } from '../../core/api/api.service';
+import { LucideAngularModule } from 'lucide-angular';
+import { toast } from 'ngx-sonner';
 
 @Component({
   selector: 'app-dashboard',
   standalone: true,
-  imports: [CommonModule, RouterModule, CardComponent, ButtonComponent],
+  imports: [
+    CommonModule, 
+    RouterModule, 
+    FormsModule,
+    LucideAngularModule,
+    EmergencyCardComponent
+  ],
   template: `
-    <div class="dashboard-layout">
-      <!-- Sidebar -->
-      <aside class="sidebar">
-        <div class="sidebar-header">
-          <h2 class="font-bold text-primary">Taller Móvil</h2>
-        </div>
-        <nav class="sidebar-nav">
-          <a class="nav-item active">Panel Principal</a>
-          <a class="nav-item">Mis Vehículos</a>
-          <a class="nav-item">Emergencias</a>
-          <a class="nav-item">Configuración</a>
-        </nav>
-        <div class="sidebar-footer">
-          <app-button variant="ghost" [fullWidth]="true" (clicked)="logout()">
-            Cerrar Sesión
-          </app-button>
-        </div>
-      </aside>
-
-      <!-- Main Content -->
-      <main class="main-content">
-        <!-- Headerbar -->
-        <header class="headerbar">
-          <div class="welcome-text">
-            <h3>Bienvenido, {{ nombreUsuario }}</h3>
-            <span class="badge role-badge">{{ rolUsuario | uppercase }}</span>
+    <div class="p-8 lg:p-12 flex flex-col gap-12 max-w-[1800px] mx-auto animate-in fade-in duration-700">
+      
+      <!-- FIELDWORK OS HEADER -->
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-end gap-8 border-b border-zinc-900 pb-8">
+        <div>
+          <h1 class="text-4xl font-bold tracking-tight mb-3 uppercase">Tablero de Control</h1>
+          <div class="flex items-center gap-4">
+            <p class="font-mono text-[10px] uppercase tracking-[.3em] text-zinc-500">
+              Vigilancia de emergencias en tiempo real
+            </p>
+            <div class="h-px w-24 bg-zinc-800"></div>
+            <span class="font-mono text-[10px] text-primary animate-pulse tracking-widest font-bold">LIVE_FEED</span>
           </div>
-          <div class="actions">
-            <!-- Avatar mockup -->
-            <div class="avatar">{{ nombreUsuario.charAt(0) }}</div>
-          </div>
-        </header>
-
-        <!-- Content Area -->
-        <div class="content-body">
-          <div class="stats-grid mb-4">
-            <app-card>
-              <h4 class="text-muted font-size-sm">Solicitudes Activas</h4>
-              <h2>2</h2>
-            </app-card>
-            <app-card>
-              <h4 class="text-muted font-size-sm">Vehículos Registrados</h4>
-              <h2>1</h2>
-            </app-card>
-            <app-card>
-              <h4 class="text-muted font-size-sm">Estado</h4>
-              <h2 class="text-success">Disponible</h2>
-            </app-card>
-          </div>
-
-          <app-card title="Visión General" subtitle="Actividad reciente en el sistema">
-            <div class="empty-state text-center p-6 text-muted">
-              <i class="las la-car-crash" style="font-size: 3rem; margin-bottom: 1rem;"></i>
-              <p>No tienes emergencias recientes.</p>
-              <div class="mt-4" *ngIf="rolUsuario === 'cliente'">
-                <app-button variant="primary">Reportar Nueva Emergencia</app-button>
-              </div>
-            </div>
-          </app-card>
         </div>
-      </main>
+
+        <!-- Filters -->
+        <div class="flex items-center bg-[#050505] border border-zinc-800 p-1">
+          <button (click)="filter = 'all'" 
+                  [class]="filter === 'all' ? 'bg-zinc-900 text-white' : 'text-zinc-600'" 
+                  class="px-5 py-2 font-bold text-[9px] uppercase tracking-[.2em] transition-all hover:text-white">
+            Todas
+          </button>
+          <button (click)="filter = 'PENDIENTE'" 
+                  [class]="filter === 'PENDIENTE' ? 'bg-zinc-900 text-white' : 'text-zinc-600'" 
+                  class="px-5 py-2 font-bold text-[9px] uppercase tracking-[.2em] transition-all hover:text-white">
+            Pendientes
+          </button>
+          <button (click)="filter = 'BLOQUEADO'" 
+                  [class]="filter === 'BLOQUEADO' ? 'bg-zinc-900 text-white' : 'text-zinc-600'" 
+                  class="px-5 py-2 font-bold text-[9px] uppercase tracking-[.2em] transition-all hover:text-white">
+            En Análisis
+          </button>
+        </div>
+      </div>
+
+      <!-- STATS GRID -->
+      <div class="grid grid-cols-1 md:grid-cols-4 bg-zinc-900 gap-px border border-zinc-800 shadow-2xl">
+        <div class="bg-[#050505] p-8 flex flex-col justify-between hover:bg-zinc-950 transition-colors">
+          <span class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500 mb-6 flex items-center gap-2">
+            <div class="w-1.5 h-1.5 bg-zinc-600"></div> Total Incidencias
+          </span>
+          <span class="font-mono text-4xl font-bold tracking-tighter">{{ stats.total }}</span>
+        </div>
+        <div class="bg-[#050505] p-8 flex flex-col justify-between border-l border-zinc-900">
+          <span class="font-mono text-[9px] uppercase tracking-[.25em] text-red-500 mb-6 flex items-center gap-2">
+            <div class="w-1.5 h-1.5 bg-red-500 animate-pulse"></div> Nivel Crítico
+          </span>
+          <span class="font-mono text-4xl font-bold tracking-tighter text-red-500">{{ stats.critical }}</span>
+        </div>
+        <div class="bg-[#050505] p-8 flex flex-col justify-between border-l border-zinc-900">
+          <span class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500 mb-6 flex items-center gap-2">
+            <div class="w-1.5 h-1.5 bg-emerald-500"></div> Disponibles
+          </span>
+          <span class="font-mono text-4xl font-bold tracking-tighter">{{ stats.pending }}</span>
+        </div>
+        <div class="bg-[#050505] p-8 flex flex-col justify-between border-l border-zinc-900">
+          <span class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500 mb-6 flex items-center gap-2">
+            <div class="w-1.5 h-1.5 bg-primary"></div> Eficiencia Red
+          </span>
+          <span class="font-mono text-4xl font-bold tracking-tighter text-primary">99.8%</span>
+        </div>
+      </div>
+
+      <!-- MAIN EMERGENCY LISTING -->
+      <div>
+        <div class="flex items-center justify-between mb-8">
+          <h2 class="font-bold text-xs tracking-[.4em] uppercase text-zinc-600">
+            Monitor de Incidencias Geográficas
+          </h2>
+          <div class="flex gap-1">
+             <div class="w-8 h-1 bg-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.2)]"></div>
+             <div class="w-8 h-1 bg-emerald-500/40"></div>
+             <div class="w-8 h-1 bg-emerald-500/60"></div>
+          </div>
+        </div>
+
+        <div *ngIf="loading" class="p-20 flex flex-col items-center justify-center gap-4">
+           <div class="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+           <p class="font-mono text-[9px] uppercase tracking-widest text-zinc-600">Sincronizando feed sismológico...</p>
+        </div>
+
+        <div *ngIf="!loading && filteredEmergencies.length === 0" 
+             class="border border-zinc-900 bg-zinc-950/30 p-24 text-center flex flex-col items-center shadow-inner">
+          <lucide-icon name="alert-triangle" size="32" class="text-zinc-800 mb-6"></lucide-icon>
+          <h3 class="font-bold text-lg mb-2 uppercase tracking-widest">Sin Incidencias Disponibles</h3>
+          <p class="text-zinc-500 text-xs font-mono uppercase tracking-tight max-w-xs">El sector está limpio o fuera de rango operativo.</p>
+        </div>
+
+        <div *ngIf="!loading && filteredEmergencies.length > 0" 
+             class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-px bg-zinc-900 border border-zinc-800 shadow-2xl">
+          <app-emergency-card 
+            *ngFor="let emg of filteredEmergencies" 
+            [data]="mapToCardFormat(emg)"
+            (onAssign)="handleClaim($event)">
+          </app-emergency-card>
+        </div>
+      </div>
     </div>
   `,
-  styles: [`
-    .dashboard-layout {
-      display: flex;
-      min-height: 100vh;
-      background-color: var(--bg-body);
-    }
-    
-    /* SIDEBAR */
-    .sidebar {
-      width: 260px;
-      background-color: var(--bg-surface);
-      border-right: 1px solid var(--border-color);
-      display: flex;
-      flex-direction: column;
-    }
-    .sidebar-header {
-      padding: var(--space-5) var(--space-6);
-      border-bottom: 1px solid var(--border-color);
-      h2 { margin: 0; font-size: var(--font-size-xl); color: var(--color-primary); }
-    }
-    .sidebar-nav {
-      flex: 1;
-      padding: var(--space-4) 0;
-      display: flex;
-      flex-direction: column;
-    }
-    .nav-item {
-      padding: var(--space-3) var(--space-6);
-      color: var(--color-text-muted);
-      cursor: pointer;
-      font-weight: 500;
-      transition: background var(--transition-fast), color var(--transition-fast);
-      
-      &:hover {
-        background-color: var(--bg-surface-hover);
-        color: var(--color-primary);
-      }
-      &.active {
-        color: var(--color-primary);
-        background-color: var(--color-primary-light);
-        border-right: 3px solid var(--color-primary);
-      }
-    }
-    .sidebar-footer {
-      padding: var(--space-4);
-      border-top: 1px solid var(--border-color);
-    }
-
-    /* MAIN CONTENT */
-    .main-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-    }
-    .headerbar {
-      height: 70px;
-      background-color: var(--bg-surface);
-      border-bottom: 1px solid var(--border-color);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      padding: 0 var(--space-8);
-      
-      .welcome-text { display: flex; align-items: center; gap: var(--space-3); }
-      h3 { margin: 0; font-size: var(--font-size-lg); }
-    }
-    
-    .role-badge {
-      background-color: var(--color-primary-light);
-      color: var(--color-primary);
-      padding: 2px 8px;
-      border-radius: var(--radius-sm);
-      font-size: var(--font-size-xs);
-      font-weight: 600;
-    }
-    
-    .avatar {
-      width: 40px;
-      height: 40px;
-      border-radius: 50%;
-      background-color: var(--color-secondary);
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-weight: bold;
-    }
-
-    .content-body {
-      padding: var(--space-8);
-      flex: 1;
-      overflow-y: auto;
-    }
-    
-    .stats-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-      gap: var(--space-6);
-      
-      h2 { margin-top: var(--space-2); font-size: var(--font-size-2xl); }
-    }
-    
-    .text-success { color: var(--color-success); }
-  `]
+  styles: []
 })
-export class DashboardComponent implements OnInit {
-  nombreUsuario = 'Usuario';
-  rolUsuario = 'Desconocido';
+export class DashboardComponent implements OnInit, OnDestroy {
+  emergencies: any[] = [];
+  filter: 'all' | 'PENDIENTE' | 'BLOQUEADO' = 'all';
+  loading = true;
+  pollingInterval: any;
 
-  constructor(private router: Router) {}
+  constructor(private api: ApiService, private router: Router) {}
 
   ngOnInit() {
-    this.nombreUsuario = localStorage.getItem('nombre') || 'Usuario Guest';
-    this.rolUsuario = localStorage.getItem('rol') || 'cliente';
+    this.refreshData();
+    this.pollingInterval = setInterval(() => this.refreshData(), 30000);
   }
 
-  logout() {
-    localStorage.clear();
-    this.router.navigate(['/']);
+  ngOnDestroy() { if (this.pollingInterval) clearInterval(this.pollingInterval); }
+
+  refreshData() {
+    // API endpoint corrected for management-admin
+    this.api.get<any[]>('/gestion-emergencia/disponibles').subscribe({
+      next: (res) => {
+        this.emergencies = res;
+        this.loading = false;
+      },
+      error: (e) => {
+        console.error('Error loading emergencies', e);
+        this.loading = false;
+      }
+    });
+  }
+
+  get filteredEmergencies() {
+    return this.emergencies.filter(emg => {
+      if (this.filter === 'all') return true;
+      if (this.filter === 'BLOQUEADO') return emg.is_locked;
+      return emg.estado_actual === this.filter && !emg.is_locked;
+    });
+  }
+
+  get stats() {
+    return {
+      total: this.emergencies.length,
+      critical: this.emergencies.filter(e => e.idPrioridad >= 4).length,
+      pending: this.emergencies.filter(e => e.estado_actual === 'PENDIENTE' && !e.is_locked).length
+    };
+  }
+
+  mapToCardFormat(emg: any) {
+    const vehiculo = emg.vehiculo || {};
+    return {
+      id: `EMG-${emg.id}`,
+      title: emg.descripcion,
+      summary: emg.resumen_ia?.resumen,
+      status: (emg.is_locked ? 'assigned' : 'pending') as 'assigned' | 'pending',
+      priority: emg.idPrioridad,
+      location: emg.direccion,
+      timeElapsed: 'REC_V_01',
+      vehicle: `${vehiculo.marca || 'N/A'} ${vehiculo.modelo || 'MOD_0'} [${emg.placaVehiculo}]`,
+      client: vehiculo.idCliente
+    };
+  }
+
+  handleClaim(id: string) {
+    const rawId = id.replace('EMG-', '');
+    // Navigate to detail for full analysis
+    this.router.navigate(['/app/emergency', rawId]);
   }
 }

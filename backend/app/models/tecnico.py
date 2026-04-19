@@ -16,3 +16,5 @@ class Tecnico(Base):
 
     # Relaciones
     taller = relationship("Taller", back_populates="tecnicos")
+    especialidades = relationship("Especialidad", secondary="tecnico_especialidad", back_populates="tecnicos")
+    emergencias_asignadas = relationship("Emergencia", secondary="asignacion_tecnico_emergencia", back_populates="tecnicos_asignados")

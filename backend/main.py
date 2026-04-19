@@ -12,12 +12,12 @@ from app.core.database import engine, Base
 from app.models import *  # noqa: F401, F403
 
 # ─── Routers ──────────────────────────────────────────────────────
-from app.api.v1 import auth, clientes, talleres, emergencias, tecnicos
+from app.api.v1 import auth, clientes, talleres, emergencias, tecnicos, emergencias_admin, catalogos, pagos
 
 app = FastAPI(
     title=settings.APP_NAME,
     version="1.0.0",
-    description="API REST para la gestión de emergencias vehiculares — Ciclo 1",
+    description="API REST para la gestión de emergencias vehiculares — Ciclo 3",
     docs_url="/docs",
     redoc_url="/redoc",
 )
@@ -25,7 +25,10 @@ app = FastAPI(
 # ─── CORS ─────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],          # Ajustar en producción
+    allow_origins=[
+        "http://localhost:4200", 
+        "http://127.0.0.1:4200"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -38,7 +41,10 @@ app.include_router(auth.router,        prefix=PREFIX, tags=["Autenticación"])
 app.include_router(clientes.router,    prefix=PREFIX, tags=["Clientes"])
 app.include_router(talleres.router,    prefix=PREFIX, tags=["Talleres"])
 app.include_router(emergencias.router, prefix=PREFIX, tags=["Emergencias"])
+app.include_router(emergencias_admin.router, prefix=f"{PREFIX}/gestion-emergencia", tags=["Gestión Emergencia"])
 app.include_router(tecnicos.router,    prefix=PREFIX, tags=["Técnicos"])
+app.include_router(catalogos.router,   prefix=PREFIX, tags=["Catálogos"])
+app.include_router(pagos.router,       prefix=PREFIX, tags=["Pagos"])
 
 
 @app.get("/", tags=["Health"])

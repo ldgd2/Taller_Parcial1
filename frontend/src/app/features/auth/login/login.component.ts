@@ -2,178 +2,151 @@ import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { Router, RouterModule } from '@angular/router';
+import { LucideAngularModule } from 'lucide-angular';
 
-// UI
-import { CardComponent } from '../../../shared/ui/card/card.component';
-import { InputComponent } from '../../../shared/ui/input/input.component';
-import { ButtonComponent } from '../../../shared/ui/button/button.component';
-import { SelectComponent, SelectOption } from '../../../shared/ui/select/select.component';
 import { ApiService } from '../../../core/api/api.service';
+import { ThemeService } from '../../../core/services/theme.service';
 
 @Component({
   selector: 'app-login',
   standalone: true,
-  imports: [CommonModule, FormsModule, RouterModule, CardComponent, InputComponent, ButtonComponent, SelectComponent],
+  imports: [CommonModule, FormsModule, RouterModule, LucideAngularModule],
   template: `
-    <div class="auth-layout">
-      <div class="auth-left">
-        <!-- Decoración / Imagen Branding -->
-        <div class="brand">
-          <h1>Taller Móvil</h1>
-          <p>Tu asistente vehicular con inteligencia artificial.</p>
-        </div>
-      </div>
+    <div class="min-h-screen bg-zinc-50 dark:bg-[#0a0a0a] text-zinc-900 dark:text-zinc-100 font-sans flex flex-col selection:bg-[#FF5733] selection:text-white relative">
       
-      <div class="auth-right">
-        <app-card class="login-card" [noPadding]="false">
-          <div class="login-header">
-            <h2>Bienvenido de nuevo</h2>
-            <p class="text-muted">Ingresa tus credenciales para continuar</p>
+      <!-- Top minimal nav -->
+      <nav class="p-6 flex justify-between items-center absolute w-full top-0 z-10">
+        <a routerLink="/" class="inline-flex items-center gap-3 font-mono text-[10px] font-bold uppercase tracking-[.25em] text-zinc-500 hover:text-zinc-900 dark:hover:text-white transition-colors group">
+          <lucide-icon name="arrow-left" class="w-4 h-4 group-hover:-translate-x-1 transition-transform"></lucide-icon> Volver al Inicio
+        </a>
+        <button 
+          (click)="theme.toggleTheme()"
+          class="p-2 border border-zinc-200 dark:border-[#222222] bg-white dark:bg-[#111111] hover:bg-zinc-100 dark:hover:bg-[#1a1a1a] transition-colors"
+          aria-label="Alternar tema"
+        >
+          <lucide-icon [name]="theme.isDark ? 'sun' : 'moon'" class="w-4 h-4"></lucide-icon>
+        </button>
+      </nav>
+
+      <div class="flex-1 flex items-center justify-center p-6 mt-16">
+        <div class="w-full max-w-md bg-white dark:bg-[#0d0d0d] border border-zinc-200 dark:border-[#222222] shadow-2xl relative">
+          
+          <!-- Architectural corner details -->
+          <div class="absolute top-0 left-0 w-2 h-2 border-t border-l border-zinc-900 dark:border-zinc-500"></div>
+          <div class="absolute top-0 right-0 w-2 h-2 border-t border-r border-zinc-900 dark:border-zinc-500"></div>
+          <div class="absolute bottom-0 left-0 w-2 h-2 border-b border-l border-zinc-900 dark:border-zinc-500"></div>
+          <div class="absolute bottom-0 right-0 w-2 h-2 border-b border-r border-zinc-900 dark:border-zinc-500"></div>
+
+          <!-- Header -->
+          <div class="border-b border-zinc-200 dark:border-[#222222] p-8 pb-6 bg-[#0a0a0a]">
+            <div class="font-mono text-xs font-bold tracking-widest flex items-center gap-2 mb-6 justify-center">
+              <span class="text-[#FF5733]">■</span>
+              FIELDWORK<span class="text-zinc-400 dark:text-zinc-600">_OS</span>
+            </div>
+            <h1 class="text-2xl font-bold tracking-tight text-center uppercase">Acceso al Sistema</h1>
+            <p class="text-zinc-500 text-[10px] font-mono tracking-widest uppercase mt-2 text-center">Credenciales de Operador de Taller</p>
           </div>
 
-          <form (ngSubmit)="onLogin()" #loginForm="ngForm" class="login-form">
+          <form (ngSubmit)="onLogin()" #loginForm="ngForm" class="p-8 space-y-6">
             
-            <app-select
-              label="Tipo de Usuario"
-              [options]="rolesOptions"
-              [(ngModel)]="formData.rol"
-              name="rol"
-              [required]="true">
-            </app-select>
-
-            <app-input
-              label="Correo Electrónico"
-              type="email"
-              placeholder="Ej: cliente@demo.com"
-              [(ngModel)]="formData.correo"
-              name="correo"
-              [required]="true"
-              icon="las la-envelope">
-            </app-input>
-
-            <app-input
-              label="Contraseña"
-              type="password"
-              placeholder="********"
-              [(ngModel)]="formData.contrasena"
-              name="contrasena"
-              [required]="true"
-              icon="las la-lock">
-            </app-input>
-
-            <div class="error-panel" *ngIf="errorMessage">
-              {{ errorMessage }}
+            <div class="space-y-3">
+              <label class="font-mono text-[9px] font-bold uppercase tracking-[.25em] text-zinc-500">
+                Identificador de Usuario
+              </label>
+              <div class="relative">
+                <lucide-icon name="mail" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"></lucide-icon>
+                <input 
+                  type="email"
+                  name="correo"
+                  [(ngModel)]="formData.correo"
+                  required
+                  placeholder="operador@taller.com"
+                  class="w-full bg-zinc-50 dark:bg-[#050505] border border-zinc-300 dark:border-[#222222] text-sm pl-12 pr-4 py-4 outline-none focus:border-zinc-900 dark:focus:border-[#FF5733] transition-colors placeholder:text-zinc-700 font-mono"
+                />
+              </div>
             </div>
 
-            <div class="actions mt-4">
-              <app-button 
-                type="submit" 
-                variant="primary" 
-                [fullWidth]="true" 
-                [loading]="loading">
-                Ingresar al Sistema
-              </app-button>
+            <div class="space-y-3">
+              <label class="flex justify-between font-mono text-[9px] font-bold uppercase tracking-[.25em] text-zinc-500 items-end">
+                <span>Clave de Acceso</span>
+                <a routerLink="/auth/register" class="text-[#FF5733] hover:underline normal-case tracking-normal font-sans text-xs font-medium">Registrar Unidad</a>
+              </label>
+              <div class="relative">
+                <lucide-icon name="key-round" class="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500"></lucide-icon>
+                <input 
+                  type="password"
+                  name="contrasena"
+                  [(ngModel)]="formData.contrasena"
+                  required
+                  placeholder="••••••••"
+                  class="w-full bg-zinc-50 dark:bg-[#050505] border border-zinc-300 dark:border-[#222222] text-sm pl-12 pr-4 py-4 outline-none focus:border-zinc-900 dark:focus:border-[#FF5733] transition-colors font-mono tracking-[.2em]"
+                />
+              </div>
             </div>
             
-            <div class="footer-links text-center mt-4">
-              <a routerLink="/" class="text-muted font-size-sm">← Volver al Inicio</a>
+            <!-- Error panel -->
+            <div *ngIf="errorMessage" class="bg-red-950/40 border border-red-900/50 p-4 text-center">
+              <p class="font-mono text-[9px] uppercase tracking-widest text-red-500 font-bold">{{ errorMessage }}</p>
             </div>
+
+            <button 
+              type="submit"
+              [disabled]="loading"
+              class="w-full bg-[#FF5733] text-white px-8 py-5 font-mono text-[11px] font-bold uppercase tracking-[.25em] hover:brightness-110 shadow-lg shadow-[#FF5733]/20 transition-all mt-4 flex items-center justify-center gap-3 disabled:opacity-50"
+            >
+              <lucide-icon *ngIf="loading" name="loader-2" class="animate-spin w-4 h-4"></lucide-icon>
+              {{ loading ? 'Sincronizando...' : 'INICIAR SESIÓN' }}
+            </button>
           </form>
-        </app-card>
+
+        </div>
       </div>
     </div>
   `,
   styles: [`
-    .auth-layout {
-      display: flex;
-      min-height: 100vh;
-      background-color: var(--bg-body);
-    }
-    .auth-left {
-      flex: 1;
-      background: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
-      color: white;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: var(--space-8);
-      
-      @media (max-width: 768px) {
-        display: none;
-      }
-    }
-    .brand h1 { font-size: 3rem; margin-bottom: var(--space-2); }
-    .brand p { font-size: 1.25rem; opacity: 0.8; }
-    
-    .auth-right {
-      flex: 1;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: var(--space-6);
-    }
-    .login-card {
-      width: 100%;
-      max-width: 440px;
-    }
-    .login-header {
-      margin-bottom: var(--space-6);
-      text-align: center;
-      
-      h2 { color: var(--color-text-main); font-size: 1.5rem; }
-    }
-    .error-panel {
-      padding: var(--space-2);
-      border-radius: var(--radius-sm);
-      background-color: var(--color-danger-light);
-      color: var(--color-danger);
-      font-size: var(--font-size-sm);
-      margin-bottom: var(--space-4);
-      text-align: center;
-    }
-    .font-size-sm { font-size: var(--font-size-sm); }
+    :host { display: block; }
   `]
 })
 export class LoginComponent {
-  rolesOptions: SelectOption[] = [
-    { label: 'Soy Cliente', value: 'cliente' },
-    { label: 'Soy Técnico / Taller', value: 'tecnico' }
-  ];
-
   formData = {
     correo: '',
     contrasena: '',
-    rol: 'cliente'
+    rol: 'admin' // Mantenemos internamente la lógica
   };
 
   loading = false;
   errorMessage = '';
 
-  constructor(private api: ApiService, private router: Router) {}
+  constructor(
+    private api: ApiService, 
+    private router: Router,
+    public theme: ThemeService
+  ) {}
 
   onLogin() {
     if (!this.formData.correo || !this.formData.contrasena) {
-      this.errorMessage = 'Por favor completa todos los campos.';
+      this.errorMessage = 'CÓDIGOS DE ACCESO FALTANTES';
       return;
     }
 
     this.loading = true;
     this.errorMessage = '';
 
-    this.api.post<any>('/auth/login', this.formData).subscribe({
+    // En la web solo se permite el login de administradores
+    this.api.post<any>('/auth/login/web', this.formData).subscribe({
       next: (res) => {
         this.loading = false;
         // Guardar token
         localStorage.setItem('access_token', res.access_token);
         localStorage.setItem('rol', res.rol);
         localStorage.setItem('nombre', res.nombre);
+        localStorage.setItem('cod_taller', res.cod_taller || '');
         
-        // Simular redirección según rol
         this.router.navigate(['/dashboard']);
       },
       error: (err) => {
         this.loading = false;
-        this.errorMessage = err.error?.detail || 'Error al iniciar sesión. Verifica tus credenciales.';
+        this.errorMessage = err.error?.detail || 'FALLA EN AUTENTICACIÓN';
       }
     });
   }

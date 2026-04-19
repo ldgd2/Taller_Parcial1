@@ -171,8 +171,25 @@ async def process_ia_worker(db_context, e, use_real_ia):
                 await db.commit()
                 print(f"  [AI-OK] Emergencia #{emergencia.id} finalizada por IA.")
             except Exception as ex:
-                print(f"  [AI-FAIL] Error en #{emergencia.id}: {ex}")
-                await db.rollback()
+                print(f"  [AI-FAIL] Error en #{emergencia.id}: {ex}. Aplicando fallback...")
+                # Fallback: Categoría "Otros" (5), Prioridad "Media" (2)
+                emergencia.idCategoria = 5
+                emergencia.idPrioridad = 2
+                
+                resumen = ResumenIA(
+                    resumen="[FALLBACK] El sistema de IA está saturado. Por favor, analice el audio/texto manualmente.",
+                    ficha_tecnica={"causas_probables": ["Desconocido"], "materiales_necesarios": ["Herramientas básicas"]},
+                    idEmergencia=emergencia.id
+                )
+                db.add(resumen)
+                
+                est_pend = (await db.execute(select(Estado).where(Estado.nombre == "PENDIENTE"))).scalar_one_or_none()
+                if est_pend:
+                    db.add(HistorialEstado(idEmergencia=emergencia.id, idEstado=est_pend.id))
+                
+                await db.commit()
+                # Pequeña espera para no saturar la API en el siguiente intento
+                await asyncio.sleep(1)
 
 # --- ORQUESTADOR ---
 
@@ -193,6 +210,12 @@ async def seed_world_builder(talleres=5, clientes=10, emergencias=5, use_real_ia
                 t = Taller(cod=cod, nombre=f"Taller {fake.company()}", direccion=fake.address(), estado="ACTIVO")
                 db.add(t)
                 taller_list.append(cod)
+                
+                # Asignar especialidades al taller (Todas para el demo)
+                especialidades = (await db.execute(select(Especialidad))).scalars().all()
+                for esp in especialidades:
+                    db.add(AsignacionEspecialidad(idTaller=cod, idEspecialidad=esp.id))
+
                 # Técnicos expertos
                 for _ in range(random.randint(2, 4)):
                     db.add(Tecnico(
@@ -203,6 +226,17 @@ async def seed_world_builder(talleres=5, clientes=10, emergencias=5, use_real_ia
                         idTaller=cod
                     ))
             await db.commit()
+        
+        # Inteligencia: Si no hay talleres creados, buscar existentes en la BD
+        if not taller_list:
+            res_t = await db.execute(select(Taller.cod))
+            taller_list = [r[0] for r in res_t.all()]
+            if taller_list:
+                print(f">> Detectados {len(taller_list)} talleres existentes en BD.")
+            else:
+                # Fallback absoluto (TAL001 del seed base)
+                taller_list = ["TAL001"]
+                print(">> Usando taller default 'TAL001'.")
 
         # 2. Clientes y Vehículos
         cliente_ids = []
@@ -220,24 +254,63 @@ async def seed_world_builder(talleres=5, clientes=10, emergencias=5, use_real_ia
                 vehiculo_placas.append(placa)
             await db.commit()
 
+        # Inteligencia: Si no hay placas, buscar existentes
+        if not vehiculo_placas:
+            res_v = await db.execute(select(Vehiculo.placa))
+            vehiculo_placas = [r[0] for r in res_v.all()]
+            if vehiculo_placas:
+                print(f">> Detectados {len(vehiculo_placas)} vehículos existentes en BD.")
+
+        # Si seguimos sin vehículos y queremos emergencias, debemos crear algunos sí o sí
+        if not vehiculo_placas and emergencias > 0:
+            print(">> No hay vehículos en BD. Generando 5 de emergencia para proceder...")
+            for _ in range(5):
+                c = Cliente(nombre=fake.name(), correo=fake.unique.email(), contrasena=hash_password("cliente123"))
+                db.add(c)
+                await db.flush()
+                placa = generate_plate()
+                db.add(Vehiculo(placa=placa, marca="Demo", modelo="Test", anio=2024, idCliente=c.id))
+                vehiculo_placas.append(placa)
+            await db.commit()
+
         # 3. Emergencias y Tráfico de IA
         if emergencias > 0:
+            print(f">> Detectando talleres para posicionamiento inteligente...")
+            # Obtener talleres con coordenadas para el "jitter"
+            res_w = await db.execute(select(Taller).where(Taller.latitud != None))
+            workshop_pool = res_w.scalars().all()
+            
+            if not workshop_pool:
+                print("!! ADVERTENCIA: No hay talleres con GPS. Las coordenadas serán aleatorias.")
+            
             print(f">> Lanzando {emergencias} Emergencias al motor de IA (CONCURRENTE)...")
             emergencia_objs = []
             est_init_id = (await db.execute(select(Estado.id).where(Estado.nombre == "INICIADA"))).scalar_one_or_none()
             
             for i in range(emergencias):
+                # 3.a Selección de Vehículo y Cliente
                 placa = random.choice(vehiculo_placas)
                 res_c = await db.execute(select(Vehiculo.idCliente).where(Vehiculo.placa == placa))
                 cid = res_c.scalar()
                 
+                # 3.b Posicionamiento inteligente
+                if workshop_pool:
+                    target = random.choice(workshop_pool)
+                    # Jitter de aprox 0.05 a 0.2 grados (~5 a 20km)
+                    lat = target.latitud + random.uniform(-0.15, 0.15)
+                    lon = target.longitud + random.uniform(-0.15, 0.15)
+                else:
+                    lat = float(fake.latitude())
+                    lon = float(fake.longitude())
+
                 e = Emergencia(
                     descripcion=f"Incidente Real {fake.word()}",
                     texto_adicional=random.choice(PROMPTS_EMERGENCIA),
                     direccion=fake.address(),
-                    latitud=float(fake.latitude()), longitud=float(fake.longitude()),
+                    latitud=lat, 
+                    longitud=lon,
                     hora=datetime.now().time(),
-                    idTaller=random.choice(taller_list),
+                    idTaller=None, # IMPORTANTE: Sin asignar para Discovery
                     idPrioridad=1, idCategoria=1, # Temporales hasta IA
                     idCliente=cid, placaVehiculo=placa
                 )
@@ -252,14 +325,11 @@ async def seed_world_builder(talleres=5, clientes=10, emergencias=5, use_real_ia
             tasks = [process_ia_worker(AsyncSessionLocal, e, use_real_ia) for e in emergencia_objs]
             await asyncio.gather(*tasks)
 
-            # 4. Enriquecimiento final (Timeline, Evidencias, Pagos)
-            print(">> Generando registros históricos de soporte (Evidencias, Timeline, Pagos)...")
+            # 4. Enriquecimiento final limitado (Solo Evidencias) - Lifecycle omitido para Discovery Test
+            print(">> Generando evidencias para las emergencias...")
             async with AsyncSessionLocal() as db_final:
                 for e in emergencia_objs:
-                    # Refresh
                     await seed_evidencia(db_final, e.id)
-                    final_est = await seed_full_lifecycle(db_final, e.id)
-                    await seed_payment(db_final, e.id, final_est)
                 await db_final.commit()
 
     print(f"\n{'='*20} POBLADO TOTAL FINALIZADO {'='*20}")

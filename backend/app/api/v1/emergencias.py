@@ -45,10 +45,10 @@ async def analizar_audio_ia(
         texto_crudo = await transcribir_audio_local(archivo_audio)
         
         # 2. IA Classification / Extraction
-        cats_res = await db.execute(select(CategoriaProblema.id, CategoriaProblema.nombre))
-        prios_res = await db.execute(select(Prioridad.id, Prioridad.nombre))
-        categorias_activas = [{"id": r.id, "nombre": r.nombre} for r in cats_res.all()]
-        prioridades_activas = [{"id": r.id, "nombre": r.nombre} for r in prios_res.all()]
+        cats_res = await db.execute(select(CategoriaProblema.id, CategoriaProblema.descripcion))
+        prios_res = await db.execute(select(Prioridad.id, Prioridad.descripcion))
+        categorias_activas = [{"id": r.id, "nombre": r.descripcion} for r in cats_res.all()]
+        prioridades_activas = [{"id": r.id, "nombre": r.descripcion} for r in prios_res.all()]
         
         resultado = await analizar_transcripcion_whisper(
             texto_crudo=texto_crudo,
@@ -87,20 +87,6 @@ async def mis_solicitudes(
     current=Depends(require_role("cliente")),
     db: AsyncSession = Depends(get_db),
 ):
-    emergencias = await emergencia_service.listar_emergencias_cliente(
+    return await emergencia_service.listar_emergencias_cliente(
         current["user_id"], db
     )
-    return [
-        EmergenciaOut(
-            id=e.id,
-            descripcion=e.descripcion,
-            texto_adicional=e.texto_adicional,
-            ubicacion=e.ubicacion,
-            fecha=e.fecha,
-            hora=e.hora,
-            idTaller=e.idTaller,
-            idPrioridad=e.idPrioridad,
-            idCategoria=e.idCategoria,
-        )
-        for e in emergencias
-    ]

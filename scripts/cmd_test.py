@@ -46,6 +46,7 @@ def add_subparser(parser):
     subparsers.add_parser("ping", help="Revisa si el servidor FastAPI backend esta respondiendo")
     subparsers.add_parser("frontend", help="Ejecuta ng test")
     subparsers.add_parser("ia", help="Ejecuta el paquete de test de Inteligencia Artificial (Whisper y OpenRouter)")
+    subparsers.add_parser("diag_ai", help="Diagnóstico profundo de cuotas y créditos de OpenRouter")
 
 def execute(args):
     target = args.target
@@ -108,17 +109,32 @@ def execute(args):
         panel_print("[cyan]Módulo: Análisis Inteligente (OpenRouter)[/cyan]", "Módulo: OpenRouter y Pydantic")
         subprocess.run([sys_exe, os.path.join(test_ia_dir, "test_openrouter.py")])
 
+    elif target == "diag_ai":
+        cprint("\n[bold magenta]Consultando Estado de Créditos en OpenRouter...[/bold magenta]", "\nConsultando Créditos de IA...")
+        sys_exe = sys.executable
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        diag_script = os.path.join(script_dir, "test_ia", "diag_openrouter.py")
+        subprocess.run([sys_exe, diag_script])
+
 def interactive_menu():
     """Interfaz interactiva delegada para Tests."""
     import questionary
-    opt = questionary.select(
-        "Módulo de Test:",
-        choices=["IA (Whisper/OpenRouter)", "Ping/Health Backend", "Frontend (Unit Tests)", "Volver"]
-    ).ask()
+    choices = [
+        "IA (Whisper/OpenRouter)", 
+        "Diagnóstico de Créditos AI",
+        "Ping/Health Backend", 
+        "Frontend (Unit Tests)", 
+        "Volver"
+    ]
+    opt = questionary.select("Módulo de Test:", choices=choices).ask()
     
     if opt == "Volver":
         return
         
-    target = "ia" if "IA" in opt else ("ping" if "Ping" in opt else "frontend")
+    if "IA (Whisper" in opt: target = "ia"
+    elif "Diagnóstico" in opt: target = "diag_ai"
+    elif "Ping" in opt: target = "ping"
+    else: target = "frontend"
+    
     execute(argparse.Namespace(target=target))
     input("\nPresiona Enter para continuar...")

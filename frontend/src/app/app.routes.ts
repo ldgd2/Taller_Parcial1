@@ -10,12 +10,52 @@ export const routes: Routes = [
     loadComponent: () => import('./features/auth/login/login.component').then(m => m.LoginComponent)
   },
   {
-    path: 'dashboard',
-    loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent)
+    path: 'auth/register',
+    loadComponent: () => import('./features/auth/register/register.component').then(m => m.RegisterComponent)
+  },
+  {
+    path: 'app',
+    loadComponent: () => import('./shared/layouts/main-layout/main-layout.component').then(m => m.MainLayoutComponent),
+    children: [
+      {
+        path: 'dashboard',
+        loadComponent: () => import('./features/dashboard/dashboard.component').then(m => m.DashboardComponent)
+      },
+      {
+        path: 'emergency/:id',
+        loadComponent: () => import('./features/emergencias/detalle/emergency-detail.component').then(m => m.EmergencyDetailComponent)
+      },
+      {
+        path: 'talleres',
+        loadComponent: () => import('./features/talleres/talleres.component').then(m => m.TalleresComponent)
+      },
+      {
+        path: 'taller/:cod',
+        loadComponent: () => import('./features/talleres/detalle/taller-detail.component').then(m => m.TallerDetailComponent)
+      },
+      {
+        path: 'tecnicos',
+        loadComponent: () => import('./features/tecnicos/tecnicos.component').then(m => m.TecnicosComponent)
+      },
+      {
+        path: 'trabajos',
+        loadComponent: () => import('./features/trabajos/trabajos.component').then(m => m.TrabajosComponent)
+      },
+      {
+        path: '',
+        redirectTo: 'dashboard',
+        pathMatch: 'full'
+      }
+    ]
   },
   {
     path: 'showcase',
     loadComponent: () => import('./features/showcase/showcase.component').then(m => m.ShowcaseComponent)
+  },
+  {
+    path: 'dashboard',
+    redirectTo: 'app/dashboard',
+    pathMatch: 'full'
   },
   {
     path: '**',

@@ -41,6 +41,7 @@ async def seed():
             Estado(nombre="INICIADA",    descripcion="Reporte sugerido por el usuario, pendiente de análisis IA"),
             Estado(nombre="PENDIENTE",   descripcion="Solicitud analizada, en espera de asignación de taller"),
             Estado(nombre="ENVIADA",     descripcion="Notificación enviada al taller para aceptación"),
+            Estado(nombre="ASIGNADO",    descripcion="Taller y técnico asignados a la emergencia"),
             Estado(nombre="EN_PROCESO",  descripcion="Técnico en camino o atendiendo"),
             Estado(nombre="ATENDIDO",    descripcion="Servicio completado"),
             Estado(nombre="CANCELADO",   descripcion="Solicitud cancelada"),
@@ -52,23 +53,36 @@ async def seed():
             if not result.fetchone():
                 db.add(e)
 
+        # ── Especialidades ────────────────────────────────────────
+        from app.models.especialidad import Especialidad
+        esp_mecanica = Especialidad(nombre="Mecánica General", descripcion="Reparación de motor y sistemas generales")
+        esp_grua = Especialidad(nombre="Grúa y Remolque", descripcion="Servicio de traslado de vehículos")
+        esp_llanteria = Especialidad(nombre="Llantería", descripcion="Reparación y cambio de neumáticos")
+        esp_bateria = Especialidad(nombre="Sistema Eléctrico / Batería", descripcion="Servicio de batería y electricidad")
+
+        result = await db.execute(text("SELECT COUNT(*) FROM especialidad"))
+        if result.scalar() == 0:
+            db.add_all([esp_mecanica, esp_grua, esp_llanteria, esp_bateria])
+            await db.flush()
+
         # ── Prioridades ───────────────────────────────────────────
         prioridades = [
             Prioridad(descripcion="BAJA"),
             Prioridad(descripcion="MEDIA"),
             Prioridad(descripcion="ALTA"),
+            Prioridad(descripcion="CRÍTICA"),
         ]
         result = await db.execute(text("SELECT COUNT(*) FROM prioridad"))
         if result.scalar() == 0:
             db.add_all(prioridades)
 
-        # ── Categorías ────────────────────────────────────────────
+        # ── Categorías ──────────────────────────────────────────── (Vinculadas a Especialidad)
         categorias = [
-            CategoriaProblema(descripcion="Batería"),
-            CategoriaProblema(descripcion="Llanta"),
-            CategoriaProblema(descripcion="Choque"),
-            CategoriaProblema(descripcion="Motor"),
-            CategoriaProblema(descripcion="Otros"),
+            CategoriaProblema(descripcion="Batería", idEspecialidad=4), # esp_bateria
+            CategoriaProblema(descripcion="Llanta", idEspecialidad=3),  # esp_llanteria
+            CategoriaProblema(descripcion="Choque", idEspecialidad=2),  # esp_grua
+            CategoriaProblema(descripcion="Motor", idEspecialidad=1),   # esp_mecanica
+            CategoriaProblema(descripcion="Otros", idEspecialidad=1),   # esp_mecanica default
         ]
         result = await db.execute(text("SELECT COUNT(*) FROM categoria_problema"))
         if result.scalar() == 0:

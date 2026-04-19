@@ -17,8 +17,7 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Decodifica el JWT y retorna el payload.
-    Los routers pueden extraer el 'rol' y el 'sub' (id del usuario).
+    Decodifica el JWT y retorna el payload completo con validación de tipos.
     """
     credentials_exc = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -27,12 +26,24 @@ async def get_current_user(
     )
     try:
         payload = decode_access_token(token)
-        user_id: str = payload.get("sub")
-        role: str = payload.get("role")
-        if user_id is None:
+        sub = payload.get("sub")
+        if not sub:
             raise credentials_exc
-        return {"user_id": int(user_id), "role": role}
-    except JWTError:
+        
+        # Aseguramos que el ID de usuario sea un entero
+        try:
+            payload["user_id"] = int(sub)
+        except (ValueError, TypeError):
+            # En caso de que el sub no sea numérico (ej: email o UUID antiguo)
+            print(f"DEBUG AUTH: sub no numérico: {sub}")
+            raise credentials_exc
+            
+        return payload
+    except JWTError as e:
+        print(f"DEBUG AUTH: JWT Error: {str(e)}")
+        raise credentials_exc
+    except Exception as e:
+        print(f"DEBUG AUTH: Error inesperado en validación: {str(e)}")
         raise credentials_exc
 
 

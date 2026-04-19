@@ -1,7 +1,18 @@
 from pydantic import BaseModel
 from typing import Optional, List
 from datetime import date, time, datetime
+from app.schemas.tecnico import TecnicoOut
+from app.schemas.vehiculo import VehiculoOut
 
+# ─── Resumen IA ───────────────────────────────────────────────────
+
+class ResumenIAOut(BaseModel):
+    id: int
+    resumen: str
+    ficha_tecnica: Optional[dict] = None
+
+    class Config:
+        from_attributes = True
 
 # ─── Crear emergencia ─────────────────────────────────────────────
 
@@ -13,8 +24,7 @@ class EmergenciaCreate(BaseModel):
     longitud: Optional[float] = None
     hora: time
     placaVehiculo: str
-    # idTaller, idPrioridad, idCategoria son asignados por el motor de asignación
-
+    audio_url: Optional[str] = None
 
 # ─── Respuesta emergencia ─────────────────────────────────────────
 
@@ -27,11 +37,19 @@ class EmergenciaOut(BaseModel):
     longitud: Optional[float]
     fecha: date
     hora: time
-    idTaller: str
+    idTaller: Optional[str] = None
     idPrioridad: int
     idCategoria: int
     placaVehiculo: str
+    audio_url: Optional[str] = None
     estado_actual: Optional[str] = None   # Calculado desde historial
+    is_locked: Optional[bool] = False    # Para el mutex dinámico
+    
+    # Datos detallados
+    resumen_ia: Optional[ResumenIAOut] = None
+    evidencias: List['EvidenciaOut'] = []
+    tecnicos_asignados: List[TecnicoOut] = []
+    vehiculo: Optional[VehiculoOut] = None
 
     model_config = {"from_attributes": True}
 
@@ -51,3 +69,6 @@ class EvidenciaOut(BaseModel):
     idEmergencia: int
 
     model_config = {"from_attributes": True}
+
+# Resolver referencias circulares si las hubiera
+EmergenciaOut.model_rebuild()
