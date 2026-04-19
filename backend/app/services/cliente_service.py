@@ -32,6 +32,7 @@ async def registrar_cliente(data: ClienteCreate, db: AsyncSession) -> ClienteOut
 
     # Crear vehículo vinculado
     vehiculo = Vehiculo(
+        placa=data.vehiculo.placa,
         marca=data.vehiculo.marca,
         modelo=data.vehiculo.modelo,
         anio=data.vehiculo.anio,
@@ -47,8 +48,32 @@ async def registrar_cliente(data: ClienteCreate, db: AsyncSession) -> ClienteOut
         id=cliente.id,
         nombre=cliente.nombre,
         correo=cliente.correo,
-        vehiculos=[],  # Se carga la lista por separado si se necesita
+        vehiculos=[vehiculo],  # Devolvemos el vehículo ahora que tenemos la placa
     )
+
+
+async def registrar_vehiculo_extra(cliente_id: int, data: VehiculoCreate, db: AsyncSession):
+    # Verificamos si la placa ya existe
+    result = await db.execute(select(Vehiculo).where(Vehiculo.placa == data.placa))
+    if result.scalar_one_or_none():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="La placa de vehículo ya se encuentra registrada en el sistema."
+        )
+
+    nuevo_vehiculo = Vehiculo(
+        placa=data.placa,
+        marca=data.marca,
+        modelo=data.modelo,
+        anio=data.anio,
+        idCliente=cliente_id
+    )
+    db.add(nuevo_vehiculo)
+    # Commit delegamos pero podemos hacer flush para validarlo
+    await db.flush()
+    return nuevo_vehiculo
+
+
 
 
 async def obtener_vehiculos_cliente(cliente_id: int, db: AsyncSession):

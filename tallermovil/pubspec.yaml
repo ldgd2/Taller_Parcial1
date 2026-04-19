@@ -30,20 +30,22 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
   cupertino_icons: ^1.0.8
+  google_fonts: ^6.2.1          # Inter + Space Mono (igual que la web)
+  flutter_animate: ^4.5.0       # Animaciones fluidas (fade, slide, scale)
+  go_router: ^14.6.2            # Navegación declarativa
+  dio: ^5.4.3+1                 # Cliente HTTP avanzado
+  shared_preferences: ^2.2.3    # Almacenamiento local (como localStorage)
+  record: ^5.0.5               # Grabadora de audio nativa
+  image_picker: ^1.1.2         # Selector de imágenes/cámara
+  permission_handler: ^11.3.1  # Gestión de permisos del OS
+  path_provider: ^2.1.3        # Acceso a directorios temporales
+  uuid: ^4.4.0                 # Identificadores para archivos
+  geolocator: ^13.0.0          # Ubicación GPS
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
-  # The "flutter_lints" package below contains a set of recommended lints to
-  # encourage good coding practices. The lint set provided by the package is
-  # activated in the `analysis_options.yaml` file located at the root of your
-  # package. See that file for information about deactivating specific lint
-  # rules and activating additional ones.
   flutter_lints: ^6.0.0
 
 # For information on the generic Dart part of this file, see the

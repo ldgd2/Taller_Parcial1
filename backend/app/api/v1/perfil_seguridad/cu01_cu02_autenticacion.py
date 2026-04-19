@@ -1,7 +1,11 @@
 """
-Router de Autenticación — CU01 / CU02
-POST /auth/login   → Inicio de sesión
-POST /auth/logout  → Cierre de sesión (invalida token en cliente)
+CU01 — Gestionar Inicio de Sesión
+CU02 — Gestionar Cierre de Sesión
+
+POST /auth/register       → Registro de Administrador y Taller
+POST /auth/login          → CU01 Inicio de sesión (App Móvil — Cliente/Técnico)
+POST /auth/login/web      → CU01 Inicio de sesión (Portal Web — Admin)
+POST /auth/logout         → CU02 Cierre de sesión
 """
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +15,7 @@ from app.core.dependencies import get_current_user
 from app.schemas.auth import LoginRequest, TokenResponse, RegisterAdminRequest
 from app.services import auth_service
 
-router = APIRouter(prefix="/auth")
+router = APIRouter(prefix="/auth", tags=["GPS — Autenticación (CU01/CU02)"])
 
 
 @router.post("/register", summary="Registro de Administrador y Taller")
@@ -22,7 +26,7 @@ async def register(data: RegisterAdminRequest, db: AsyncSession = Depends(get_db
     return await auth_service.register_admin(data, db)
 
 
-@router.post("/login", response_model=TokenResponse, summary="CU01 — Inicio de sesión Móvil")
+@router.post("/login", response_model=TokenResponse, summary="CU01 — Inicio de sesión Móvil (Cliente/Técnico)")
 async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     """
     Autentica un Cliente o Técnico (Uso exclusivo para la App Móvil).
@@ -31,7 +35,7 @@ async def login(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     return await auth_service.login(data, db)
 
 
-@router.post("/login/web", response_model=TokenResponse, summary="CU01 — Inicio de sesión Web")
+@router.post("/login/web", response_model=TokenResponse, summary="CU01 — Inicio de sesión Web (Admin)")
 async def login_web(data: LoginRequest, db: AsyncSession = Depends(get_db)):
     """
     Autentica un Administrador de Taller (Uso exclusivo para el Portal Web).

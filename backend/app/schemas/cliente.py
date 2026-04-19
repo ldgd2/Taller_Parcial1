@@ -6,6 +6,7 @@ from datetime import datetime
 # ─── Vehículo ─────────────────────────────────────────────────────
 
 class VehiculoCreate(BaseModel):
+    placa: str
     marca: str
     modelo: str
     anio: int
