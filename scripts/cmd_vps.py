@@ -64,8 +64,8 @@ def setup_vps_services():
     public_ip = get_public_ip()
     cprint(f"[dim]IP Detectada:[/dim] [bold green]{public_ip}[/bold green]", f"IP: {public_ip}")
     
-    port_back = questionary.text("Puerto para el servicio BACKEND:", default="8000").ask()
-    port_front = questionary.text("Puerto para el servicio FRONTEND (Nginx):", default="80").ask()
+    port_back = questionary.text("Puerto para el servicio BACKEND (FastAPI):", default="8000").ask()
+    port_front = questionary.text("Puerto para el servicio FRONTEND (Angular DEV):", default="4200").ask()
     
     cwd = os.getcwd()
     user = getpass.getuser()
@@ -73,18 +73,17 @@ def setup_vps_services():
     if not os.path.exists("deploy"):
         os.makedirs("deploy")
 
-    # --- BACKEND SERVICE ---
+    # --- BACKEND SERVICE (Uvicorn) ---
     backend_svc = f"""[Unit]
-Description=Servicio Taller Backend (Auto-Restart)
+Description=Servicio Taller Backend (Dev Mode)
 After=network.target
 
 [Service]
 User={user}
-Group=www-data
 WorkingDirectory={cwd}/backend
 Environment="PATH={cwd}/backend/.venv/bin"
 EnvironmentFile={cwd}/.env
-ExecStart={cwd}/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port {port_back} --workers 4
+ExecStart={cwd}/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port {port_back}
 Restart=always
 RestartSec=5
 
@@ -94,42 +93,40 @@ WantedBy=multi-user.target
     with open("deploy/taller-backend.service", "w") as f:
         f.write(backend_svc)
 
-    # --- FRONTEND NGINX ---
-    nginx_conf = f"""server {{
-    listen {port_front};
-    server_name {public_ip};
+    # --- FRONTEND SERVICE (Angular Dev Server) ---
+    # Usamos npm start pasándole host y puerto para que sea accesible externamente
+    frontend_svc = f"""[Unit]
+Description=Servicio Taller Frontend (Angular Dev)
+After=network.target
 
-    location /api/v1/ {{
-        proxy_pass http://localhost:{port_back};
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }}
+[Service]
+User={user}
+WorkingDirectory={cwd}/frontend
+ExecStart=/usr/bin/npm start -- --host 0.0.0.0 --port {port_front} --disable-host-check
+Restart=always
+RestartSec=10
 
-    location / {{
-        root {cwd}/frontend/dist/frontend/browser;
-        index index.html;
-        try_files $uri $uri/ /index.html;
-    }}
-}}
+[Install]
+WantedBy=multi-user.target
 """
-    with open("deploy/taller-nginx.conf", "w") as f:
-        f.write(nginx_conf)
+    with open("deploy/taller-frontend.service", "w") as f:
+        f.write(frontend_svc)
 
-    cprint("\n[bold green]✔ Archivos de servicio generados en ./deploy/[/bold green]", "Archivos generados en ./deploy/")
+    cprint("\n[bold green]✔ Servicios GENERADOS (SIN NGINX) en ./deploy/[/bold green]", "Servicios generados (SIN NGINX).")
     
     if platform.system() != "Windows":
-        install = questionary.confirm("¿Deseas intentar instalar los servicios automáticamente en este sistema Linux?").ask()
+        install = questionary.confirm("¿Deseas instalar y activar estos servicios de ejecución ahora mismo?").ask()
         if install:
             os.system(f"sudo cp {cwd}/deploy/taller-backend.service /etc/systemd/system/")
-            os.system(f"sudo cp {cwd}/deploy/taller-nginx.conf /etc/nginx/sites-available/taller")
-            os.system("sudo ln -sf /etc/nginx/sites-available/taller /etc/nginx/sites-enabled/")
+            os.system(f"sudo cp {cwd}/deploy/taller-frontend.service /etc/systemd/system/")
             os.system("sudo systemctl daemon-reload")
-            os.system("sudo systemctl enable taller-backend")
-            os.system("sudo systemctl restart taller-backend")
-            os.system("sudo systemctl restart nginx")
-            cprint("[bold green]🚀 Servicios instalados y levantados con éxito.[/bold green]", "Servicios instalados.")
+            os.system("sudo systemctl enable taller-backend taller-frontend")
+            os.system("sudo systemctl restart taller-backend taller-frontend")
+            cprint("[bold green]🚀 Servicios levantados en modo DEV.[/bold green]", "Servicios levantados.")
+            cprint(f"[bold cyan]Backend:[/bold cyan] http://{public_ip}:{port_back}", f"Backend: {public_ip}:{port_back}")
+            cprint(f"[bold cyan]Frontend:[/bold cyan] http://{public_ip}:{port_front}", f"Frontend: {public_ip}:{port_front}")
     else:
-        cprint("[yellow]⚠ Estás en Windows.[/yellow] Copia los archivos de ./deploy/ a tu VPS y ejecútalos con systemctl.", "Copia los archivos a tu VPS.")
+        cprint("[yellow]⚠ Instrucciones:[/yellow] Copia los archivos de ./deploy/ a /etc/systemd/system/ en tu Ubuntu.", "Copia los archivos a /etc/systemd/system/.")
 
 def check_services():
     if platform.system() == "Windows":
@@ -137,9 +134,10 @@ def check_services():
         return
     
     os.system("clear")
-    cprint("[bold cyan]ESTADO DE SERVICIOS[/bold cyan]", "ESTADO DE SERVICIOS")
+    cprint("[bold cyan]ESTADO DE LOS DAEMONS DE EJECUCIÓN[/bold cyan]", "ESTADO DE SERVICIOS")
     os.system("systemctl status taller-backend --no-pager")
-    os.system("systemctl status nginx --no-pager")
+    print("-" * 30)
+    os.system("systemctl status taller-frontend --no-pager")
     input("\nPresiona Enter para continuar...")
 
 def restart_services():
@@ -147,8 +145,7 @@ def restart_services():
         cprint("[red]Esta opción solo funciona en Linux/VPS.[/red]", "Solo Linux.")
         return
     
-    cprint("[yellow]Reiniciando servicios...[/yellow]", "Reiniciando...")
-    os.system("sudo systemctl restart taller-backend")
-    os.system("sudo systemctl restart nginx")
-    cprint("[bold green]✔ Reiniciado.[/bold green]", "Reiniciado.")
+    cprint("[yellow]Reiniciando servicios de ejecución...[/yellow]", "Reiniciando...")
+    os.system("sudo systemctl restart taller-backend taller-frontend")
+    cprint("[bold green]✔ Servicios reiniciados.[/bold green]", "Reiniciado.")
     time.sleep(2)
