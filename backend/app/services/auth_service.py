@@ -105,7 +105,7 @@ async def login(data: LoginRequest, db: AsyncSession) -> TokenResponse:
             ip=get_ip_context()
         ))
 
-        return TokenResponse(access_token=token, rol="cliente", nombre=user.nombre)
+        return TokenResponse(access_token=token, rol="cliente", user_id=user.id, nombre=user.nombre)
 
     elif data.rol == "tecnico":
         result = await db.execute(select(Tecnico).where(Tecnico.correo == data.correo))
@@ -139,6 +139,7 @@ async def login(data: LoginRequest, db: AsyncSession) -> TokenResponse:
         return TokenResponse(
             access_token=token, 
             rol="tecnico", 
+            user_id=user.id,
             nombre=user.nombre, 
             cod_taller=user.idTaller,
             nombre_taller=workshop_name
@@ -191,6 +192,7 @@ async def login_web(data: LoginRequest, db: AsyncSession) -> TokenResponse:
     return TokenResponse(
         access_token=token, 
         rol="admin", 
+        user_id=user.id,
         nombre=user.nombre, 
         cod_taller=user.idTaller,
         nombre_taller=workshop_name

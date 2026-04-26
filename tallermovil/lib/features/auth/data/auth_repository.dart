@@ -23,13 +23,12 @@ class AuthRepository {
     // 3. Guardar en el dispositivo de forma segura el Token
     await localStorage.saveToken(authResponse.accessToken);
 
-    // 4. Guardar datos de contexto de negocio si existen
-    if (authResponse.taller != null) {
-      await localStorage.saveSessionData(
-        codTaller: authResponse.taller!,
-        rol: authResponse.rol,
-      );
-    }
+    // 4. Guardar datos de contexto de negocio
+    await localStorage.saveSessionData(
+      codTaller: authResponse.taller ?? '',
+      rol: authResponse.rol,
+      userId: authResponse.userId,
+    );
   }
 
   /// Registra un nuevo cliente y su vehículo

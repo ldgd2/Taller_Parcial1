@@ -4,6 +4,9 @@ import { RouterModule } from '@angular/router';
 import { EmergencyCardComponent } from '../../shared/ui/emergency-card/emergency-card.component';
 import { ApiService } from '../../core/api/api.service';
 import { LucideAngularModule } from 'lucide-angular';
+import { SocketService } from '../../core/services/socket.service';
+import { Subscription } from 'rxjs';
+import { toast } from 'ngx-sonner';
 
 @Component({
   selector: 'app-trabajos',
@@ -64,15 +67,48 @@ import { LucideAngularModule } from 'lucide-angular';
     </div>
   `
 })
-export class TrabajosComponent implements OnInit {
+export class TrabajosComponent implements OnInit, OnDestroy {
   items: any[] = [];
   loading = true;
   tab: 'active' | 'done' = 'active';
+  private socketSub?: Subscription;
 
-  constructor(private api: ApiService) {}
+  constructor(
+    private api: ApiService,
+    private socketService: SocketService
+  ) {}
 
   ngOnInit() {
     this.loadData();
+    
+    // Connect to WebSocket for real-time updates
+    const workshopId = localStorage.getItem('cod_taller') || 'anonymous';
+    this.socketService.connect(workshopId);
+    
+    this.socketSub = this.socketService.getMessages().subscribe(msg => {
+      if (msg.type === 'db_update' && (msg.table === 'emergencia' || msg.table === 'pago')) {
+        this.loadData();
+        toast.info(`Bitácora actualizada en tiempo real`);
+      }
+
+      if (msg.type === 'chat_message') {
+        const item = this.items.find(i => i.id === msg.idEmergencia);
+        if (item && msg.rol_remitente === 'cliente') {
+          item.hasUnreadMessages = true;
+          this.playNotificationSound();
+          toast.info(`Nuevo mensaje del cliente en EMG-${msg.idEmergencia}`);
+        }
+      }
+    });
+  }
+
+  private playNotificationSound() {
+    const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2354/2354-preview.mp3');
+    audio.play().catch(e => console.log('Audio play failed:', e));
+  }
+
+  ngOnDestroy() {
+    if (this.socketSub) this.socketSub.unsubscribe();
   }
 
   loadData() {
@@ -108,7 +144,8 @@ export class TrabajosComponent implements OnInit {
       location: emg.direccion,
       timeElapsed: isDone ? 'COMPLETADO' : 'ACTIVO',
       vehicle: `${vehiculo.marca || 'N/A'} ${vehiculo.modelo || 'MOD_0'} [${emg.placaVehiculo}]`,
-      client: vehiculo.idCliente
+      client: vehiculo.idCliente,
+      hasUnreadMessages: emg.hasUnreadMessages
     };
   }
 }

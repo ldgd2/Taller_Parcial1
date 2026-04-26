@@ -20,3 +20,4 @@ from app.models.asignacion_tecnico_emergencia import AsignacionTecnicoEmergencia
 from app.models.fcm_token import FCMToken              # noqa: F401
 from app.models.metodo_pago import MetodoPago          # noqa: F401
 from app.models.bitacora import Bitacora             # noqa: F401
+from app.models.mensaje_chat import MensajeChat      # noqa: F401

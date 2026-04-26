@@ -13,6 +13,7 @@ export interface EmergencyCardData {
   timeElapsed: string;
   vehicle: string;
   client?: string;
+  hasUnreadMessages?: boolean;
 }
 
 @Component({
@@ -24,6 +25,13 @@ export interface EmergencyCardData {
          class="group flex flex-col transition-all duration-300 cursor-pointer overflow-hidden shadow-sm border border-t-4 relative"
          [ngClass]="getCardClasses()">
       
+      <!-- Indicador de Chat (Puntito) -->
+      <div *ngIf="data.hasUnreadMessages" 
+           class="absolute top-2 left-2 z-20 flex items-center gap-1.5 bg-blue-600 px-2 py-0.5 rounded-full shadow-lg border border-blue-400">
+        <div class="w-2 h-2 bg-white rounded-full animate-ping"></div>
+        <span class="text-[8px] font-bold text-white uppercase tracking-tighter">Mensaje Nuevo</span>
+      </div>
+
       <!-- Efecto de alarma pulsante para criticidad extrema -->
       <div *ngIf="data.priority >= 4" class="absolute inset-0 bg-red-500/5 animate-pulse pointer-events-none"></div>
       

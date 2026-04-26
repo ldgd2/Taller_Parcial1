@@ -5,6 +5,8 @@ from app.models.bitacora import Bitacora
 from app.core.context import get_user_context, get_ip_context
 from datetime import date, datetime, time
 from decimal import Decimal
+import asyncio
+from app.core.socket_manager import manager
 
 def json_serializable(obj):
     """Convierte objetos no serializables en JSON a strings o floats."""
@@ -104,5 +106,19 @@ def register_audit_listeners(Base):
             for entry in entries:
                 session.add(entry)
                 
+                # Broadcast real-time updates for specific tables
+                if entry.tabla in ["emergencia", "pago"]:
+                    try:
+                        loop = asyncio.get_event_loop()
+                        if loop.is_running():
+                            loop.create_task(manager.broadcast({
+                                "type": "db_update",
+                                "table": entry.tabla,
+                                "id": entry.registro_id,
+                                "action": entry.accion
+                            }))
+                    except Exception as e:
+                        print(f"Error broadcasting: {e}")
+                        
         finally:
             session._audit_active = False

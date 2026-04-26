@@ -8,6 +8,8 @@ import { EmergencyCardComponent } from '../../shared/ui/emergency-card/emergency
 import { ApiService } from '../../core/api/api.service';
 import { LucideAngularModule } from 'lucide-angular';
 import { toast } from 'ngx-sonner';
+import { SocketService } from '../../core/services/socket.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-dashboard',
@@ -125,16 +127,33 @@ export class DashboardComponent implements OnInit, OnDestroy {
   emergencies: any[] = [];
   filter: 'all' | 'PENDIENTE' | 'BLOQUEADO' = 'all';
   loading = true;
-  pollingInterval: any;
+  private socketSub?: Subscription;
 
-  constructor(private api: ApiService, private router: Router) {}
+  constructor(
+    private api: ApiService, 
+    private router: Router,
+    private socketService: SocketService
+  ) {}
 
   ngOnInit() {
     this.refreshData();
-    this.pollingInterval = setInterval(() => this.refreshData(), 30000);
+    
+    // Connect to WebSocket for real-time updates
+    const workshopId = localStorage.getItem('cod_taller') || 'anonymous';
+    this.socketService.connect(workshopId);
+    
+    this.socketSub = this.socketService.getMessages().subscribe(msg => {
+      if (msg.type === 'db_update' && (msg.table === 'emergencia' || msg.table === 'pago')) {
+        console.log('Real-time update received:', msg);
+        this.refreshData();
+        toast.info(`Cambio detectado en ${msg.table}: Actualizando tablero...`);
+      }
+    });
   }
 
-  ngOnDestroy() { if (this.pollingInterval) clearInterval(this.pollingInterval); }
+  ngOnDestroy() {
+    if (this.socketSub) this.socketSub.unsubscribe();
+  }
 
   refreshData() {
     // API endpoint corrected for management-admin

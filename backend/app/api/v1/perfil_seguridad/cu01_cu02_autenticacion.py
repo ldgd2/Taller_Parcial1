@@ -45,7 +45,7 @@ async def login_web(data: LoginRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/logout", summary="CU02 — Cierre de sesión")
-async def logout(current=Depends(get_current_user)):
+async def logout():
     """
     El cliente descarta el token. En una implementación con lista negra
     (blacklist) de JWT, aquí se agregaría el jti a Redis.

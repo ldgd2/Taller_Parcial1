@@ -10,9 +10,8 @@ import '../../../../core/device/permission_service.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/storage/local_storage.dart';
 import '../../../../shared/components/feedback/t_snackbar.dart';
-import '../../data/emergency_service.dart';
-import '../../models/emergency_report.dart';
 import '../../../vehicles/data/vehicle_service.dart';
+import 'emergency_upload_controller.dart';
 
 class ReportEmergencyController extends ChangeNotifier {
   // Grabadora
@@ -39,18 +38,30 @@ class ReportEmergencyController extends ChangeNotifier {
   String descripcion = '';
 
   bool isUploading = false;
-  late final EmergencyService _emergencyService;
   late final VehicleService _vehicleService;
   List<Map<String, dynamic>> vehicles = [];
+  
+  int? editingEmergencyId;
 
-  ReportEmergencyController() {
+  ReportEmergencyController({Map<String, dynamic>? existingEmergency}) {
     _audioRecorder = AudioRecorder();
     _checkPermissions();
     
+    if (existingEmergency != null) {
+      editingEmergencyId = existingEmergency['id'];
+      descripcion = existingEmergency['descripcion'] ?? '';
+      placa = existingEmergency['placaVehiculo'] ?? '';
+      audioPath = existingEmergency['audio_url'];
+      if (existingEmergency['evidencias'] != null) {
+        for (var ev in existingEmergency['evidencias']) {
+          imagePaths.add(ev['direccion']);
+        }
+      }
+    }
+
     // Iniciar servicio
     final storage = LocalStorage();
     final apiClient = ApiClient(localStorage: storage);
-    _emergencyService = EmergencyService(apiClient: apiClient);
     _vehicleService = VehicleService(apiClient: apiClient);
 
     _loadVehicles();
@@ -186,60 +197,31 @@ class ReportEmergencyController extends ChangeNotifier {
       return;
     }
 
-    isUploading = true;
-    notifyListeners();
-    
     try {
-      // 1. Obtener ubicación GPS y Dirección Legible
+      TSnackbar.info(context, 'Obteniendo ubicación y enviando en segundo plano...');
+      
       final position = await LocationService.getCurrentLocation();
       final address = await LocationService.getAddressFromLatLng(position.latitude, position.longitude);
       
-      // 2. Subir multimedia
-      final List<String> allFiles = [];
-      if (audioPath != null) allFiles.add(audioPath!);
-      allFiles.addAll(imagePaths);
-      
-      final uploadResult = await _emergencyService.uploadMultimedia(allFiles);
-      final List<dynamic> archivos = uploadResult['archivos'];
-      
-      // Separar audio de imágenes
-      String? audioUrl;
-      final List<String> imageUrls = [];
-
-      for (var f in archivos) {
-        final url = f['url'] as String;
-        if (url.endsWith('.m4a') || url.endsWith('.aac')) {
-          audioUrl = url;
-        } else {
-          imageUrls.add(url);
-        }
-      }
-
-      // 3. Enviar reporte final
-      final report = EmergencyReport(
-        descripcion: descripcion.isNotEmpty ? descripcion : 'Emergencia reportada por audio/fotos',
-        direccion: address,
-        latitud: position.latitude,
-        longitud: position.longitude,
-        placaVehiculo: placa,
-        audioUrl: audioUrl,
-        evidenciasUrls: imageUrls,
-        textoAdicional: uploadResult['transcripcion_cruda'],
+      EmergencyUploadController().queueEmergency(
+        audioPath: audioPath,
+        imagePaths: List.from(imagePaths),
+        placa: placa,
+        descripcion: descripcion,
+        latitude: position.latitude,
+        longitude: position.longitude,
+        address: address,
+        existingEmergencyId: editingEmergencyId,
       );
 
-      await _emergencyService.submitEmergency(report);
-      
-      if (!context.mounted) return;
-      
-      TSnackbar.success(context, '¡S.O.S Enviado correctamente!');
-      Navigator.pop(context); // Volver al home
+      if (context.mounted) {
+        Navigator.pop(context);
+      }
 
     } catch (e) {
-      if (!context.mounted) return;
-      TSnackbar.error(context, e.toString());
-    } finally {
-      isUploading = false;
-      notifyListeners();
+      if (context.mounted) {
+        TSnackbar.error(context, 'Error al obtener ubicación: $e');
+      }
     }
   }
 }

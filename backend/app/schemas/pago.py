@@ -1,7 +1,20 @@
 from pydantic import BaseModel
 from decimal import Decimal
 from datetime import date
-from typing import Optional
+from typing import Optional, List
+
+class FacturaItem(BaseModel):
+    descripcion: str
+    tipo: str  # 'servicio' o 'repuesto'
+    cantidad: int
+    precio_unitario: float
+    total: float
+
+class DetalleFactura(BaseModel):
+    items: List[FacturaItem]
+    subtotal: float
+    impuestos: float
+    total_general: float
 
 class PagoBase(BaseModel):
     monto: Decimal
@@ -24,6 +37,7 @@ class PagoOut(PagoBase):
     stripe_intent_id: Optional[str]
     estado: str
     metodo_pago_id: Optional[str]
+    detalle_factura: Optional[dict]
 
     class Config:
         from_attributes = True

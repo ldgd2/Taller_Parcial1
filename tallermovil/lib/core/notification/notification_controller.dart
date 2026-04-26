@@ -5,6 +5,7 @@ import '../network/api_client.dart';
 import '../storage/local_storage.dart';
 import '../../main.dart';
 import '../../features/emergencies/views/detail/emergency_detail_view.dart';
+import '../../features/chat/ui/chat_view.dart';
 
 class NotificationController {
   static final FirebaseMessaging _messaging = FirebaseMessaging.instance;
@@ -78,8 +79,18 @@ class NotificationController {
     final emergencyId = data['emergencia_id'];
 
     if (emergencyId != null) {
-      print('DEBUG NOTI: Click en emergencia $emergencyId');
+      print('DEBUG NOTI: Click en emergencia $emergencyId - Tipo: ${data['tipo']}');
       
+      final tipo = data['tipo'];
+      if (tipo == 'chat') {
+        TallerMovilApp.navigatorKey.currentState?.push(
+          MaterialPageRoute(
+            builder: (_) => ChatView(emergenciaId: int.parse(emergencyId.toString())),
+          ),
+        );
+        return;
+      }
+
       try {
         final storage = LocalStorage();
         final apiClient = ApiClient(localStorage: storage);
@@ -118,5 +129,26 @@ class NotificationController {
   @pragma('vm:entry-point')
   static Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     print("Handling a background message: ${message.messageId}");
+  }
+
+  static Future<void> showLocalNotification({
+    required String title,
+    required String body,
+    Map<String, dynamic>? payload,
+  }) async {
+    await _localNotifications.show(
+      id: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      title: title,
+      body: body,
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'local_channel',
+          'Local Notifications',
+          importance: Importance.max,
+          priority: Priority.high,
+          icon: '@mipmap/ic_launcher',
+        ),
+      ),
+    );
   }
 }

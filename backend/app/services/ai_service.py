@@ -1,99 +1,124 @@
-import instructor
-from openai import AsyncOpenAI
 import json
+import base64
+import os
+import re
+from openai import AsyncOpenAI
 from app.core.config import settings
-from app.schemas.ai_schemas import AnalisisEstructuradoIA, SimulacionCostoIA
+from app.schemas.ai_schemas import AnalisisEstructuradoIA, FichaTecnica
 
-# Initialize the client with OpenRouter
-client = instructor.from_openai(AsyncOpenAI(
+# Cliente de OpenAI normal para evitar problemas de "Tool Use" en modelos gratuitos
+client = AsyncOpenAI(
     base_url="https://openrouter.ai/api/v1",
     api_key=settings.OPENROUTER_API_KEY,
-))
+)
 
 async def analizar_transcripcion_whisper(
     texto_crudo: str, 
-    vehiculo_info: str,
     categorias_disponibles: list[dict], 
-    prioridades_disponibles: list[dict]
+    prioridades_disponibles: list[dict],
+    vehiculo_info: str = "",
+    evidencias_urls: list[str] = []
 ) -> AnalisisEstructuradoIA:
     """
-    Analiza el texto de una emergencia y extrae de forma estructurada
-    la categoría, prioridad, resumen y ficha técnica preliminar para el mecánico.
+    Analiza el reporte usando un prompt de JSON crudo para máxima compatibilidad.
     """
-    
-    # Formatear el contexto para el prompt
-    cat_str = json.dumps(categorias_disponibles, ensure_ascii=False)
-    pri_str = json.dumps(prioridades_disponibles, ensure_ascii=False)
+    cat_str = ", ".join([f"{c['id']}:{c['nombre']}" for c in categorias_disponibles])
+    pri_str = ", ".join([f"{p['id']}:{p['nombre']}" for p in prioridades_disponibles])
     
     system_prompt = f"""
-Eres un experto en peritaje mecánico vehicular de alta precisión.
-Tu misión es generar una ficha técnica accionable para que un TALLER MECÁNICO se prepare antes de salir al auxilio.
+Eres un mecánico experto en diagnóstico remoto. Analiza el reporte de voz/texto y LAS IMÁGENES adjuntas.
+Debes responder ÚNICAMENTE con un objeto JSON.
 
-VEHÍCULO DEL CLIENTE: {vehiculo_info}
+REGLA DE ORO: En el campo "resumen_taller", DEBES mencionar explícitamente qué observas en las fotos para respaldar tu diagnóstico.
 
-CATEGORÍAS DISPONIBLES (Usa el ID exacto):
-{cat_str}
+VEHÍCULO: {vehiculo_info}
+CATEGORÍAS (ID:Nombre): {cat_str}
+PRIORIDADES (ID:Nombre): {pri_str}
 
-PRIORIDADES DISPONIBLES (Usa el ID exacto):
-{pri_str}
-
-Instrucciones Críticas de Validación y Formato:
-1. 'es_valida': Evalúa si el reporte es una falla mecánica real de un vehículo. Si el usuario envía bromas, pide código de programación, habla de temas no mecánicos o el texto no tiene sentido automotriz, marca FALSE.
-2. 'motivo_rechazo': Si 'es_valida' es FALSE, especifica la razón (Ej: "El usuario está solicitando código Python", "Reporte fuera de contexto automotriz").
-3. 'recomendaciones_taller': Proporciona consejos estratégicos para el mecánico (Ej: "Este modelo de BMW suele tener problemas con el sensor X al recalentar, llevar escáner específico", "El cliente parece alterado, mantener comunicación calmada").
-4. 'titulo_emergencia': Genera un título corto y profesional.
-5. 'resumen_taller': Redacta un resumen técnico EXCLUSIVO para el taller.
-6. 'diagnostico_probable': Basado en síntomas y el modelo de auto, propón la falla más lógica.
-7. 'piezas_necesarias' y 'repuestos_sugeridos': Lista componentes y repuestos que el taller debe preparar.
-8. 'protocolo_tecnico': Instrucciones específicas para el TÉCNICO al llegar.
-9. Selecciona el 'id_categoria' e 'id_prioridad' que mejor correspondan.
+Responde con este formato exacto:
+{{
+  "es_valida": true,
+  "titulo_emergencia": "Título corto",
+  "resumen_taller": "Resumen para el mecánico",
+  "id_categoria": {categorias_disponibles[0]['id'] if categorias_disponibles else 0},
+  "id_prioridad": {prioridades_disponibles[0]['id'] if prioridades_disponibles else 0},
+  "ficha_tecnica": {{
+    "diagnostico_probable": "...",
+    "piezas_necesarias": ["p1", "p2"],
+    "repuestos_sugeridos": ["r1", "r2"],
+    "protocolo_tecnico": ["paso 1", "paso 2"]
+  }},
+  "recomendaciones_taller": "...",
+  "motivo_rechazo": null
+}}
 """
 
-    response: AnalisisEstructuradoIA = await client.chat.completions.create(
-        model=settings.OPENROUTER_MODEL_NAME,
-        response_model=AnalisisEstructuradoIA,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"REPORTE DEL CLIENTE: {texto_crudo}"},
-        ],
-        max_retries=3
-    )
-
-    return response
-
-async def simular_costo_servicio(
-    texto_crudo: str, 
-    vehiculo_info: str,
-    distancia_estimada: float = 0.0
-) -> SimulacionCostoIA:
-    """
-    Simula el costo de un servicio mecánico basado en la descripción, 
-    el vehículo y precios de mercado.
-    """
+    full_prompt = f"{system_prompt}\n\nREPORTE DEL CLIENTE: {texto_crudo}"
     
-    system_prompt = f"""
-Eres un analista de costos para servicios mecánicos automotrices.
-Tu tarea es simular un presupuesto justo basado en:
-1. VEHÍCULO: {vehiculo_info}
-2. DISTANCIA AL TALLER: {distancia_estimada} km
-3. MERCADO: Precios estándar para repuestos y mano de obra en 2024.
+    user_content = [
+        {"type": "text", "text": full_prompt}
+    ]
+    
+    print(f"🖼️ Procesando {len(evidencias_urls)} imágenes para la IA...")
+    for img_url in evidencias_urls[:5]:
+        image_data = img_url
+        if "/uploads/" in img_url or "localhost" in img_url or settings.APP_HOST in img_url or not img_url.startswith('http'):
+            try:
+                filename = img_url.split('/')[-1]
+                file_path = os.path.join("uploads", filename)
+                if os.path.exists(file_path):
+                    with open(file_path, "rb") as f:
+                        b64 = base64.b64encode(f.read()).decode('utf-8')
+                        ext = filename.split('.')[-1].lower()
+                        mime_ext = 'jpeg' if ext in ['jpg', 'jpeg'] else ext
+                        image_data = f"data:image/{mime_ext};base64,{b64}"
+                        print(f"✅ Imagen cargada como base64: {filename}")
+            except Exception as e:
+                print(f"❌ Error base64: {e}")
 
-INSTRUCCIONES:
-- 'mano_de_obra': Debe incluir el costo base por diagnóstico y el servicio. Considera la complejidad del auto.
-- 'repuestos_estimados': Identifica qué piezas podrían necesitar cambio y ponles un precio real de mercado.
-- 'comision_sistema': DEBE SER EXACTAMENTE EL 10% de (Mano de obra + Repuestos).
-- 'total_estimado': Suma de todos los rubros.
-- 'justificacion_mercado': Explica brevemente por qué el precio es ese (Ej: "El kit de distribución para este Audi es premium", "La distancia de 20km influye en el costo de traslado").
-"""
+        user_content.append({
+            "type": "image_url",
+            "image_url": {"url": image_data}
+        })
 
-    response: SimulacionCostoIA = await client.chat.completions.create(
-        model=settings.OPENROUTER_MODEL_NAME,
-        response_model=SimulacionCostoIA,
-        messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"FALLA REPORTADA: {texto_crudo}"},
-        ],
-        max_retries=3
-    )
+    print(f"🤖 Invocando IA ({settings.OPENROUTER_MODEL_NAME}) en modo COMPATIBLE...")
+    
+    try:
+        response = await client.chat.completions.create(
+            model=settings.OPENROUTER_MODEL_NAME,
+            messages=[
+                {"role": "user", "content": user_content},
+            ],
+            response_format={ "type": "json_object" } if "gemini" in settings.OPENROUTER_MODEL_NAME.lower() else None,
+            timeout=20
+        )
+        
+        content = response.choices[0].message.content
+        # Limpiar posible basura de markdown
+        clean_json = re.sub(r'```json\s*|\s*```', '', content).strip()
+        data = json.loads(clean_json)
+        
+        # Asegurar que motivo_rechazo no sea nulo
+        if "motivo_rechazo" not in data or data["motivo_rechazo"] is None:
+            data["motivo_rechazo"] = ""
+            
+        return AnalisisEstructuradoIA(**data)
 
-    return response
+    except Exception as e:
+        print(f"🚨 Fallo total de IA (Timeout o Error): {str(e)}")
+        # Fallback manual para no bloquear la app
+        return AnalisisEstructuradoIA(
+            es_valida=True,
+            titulo_emergencia="Reporte en Proceso",
+            resumen_taller="La IA no pudo procesar el reporte, pero se ha registrado la solicitud.",
+            id_categoria=categorias_disponibles[0]['id'] if categorias_disponibles else 1,
+            id_prioridad=prioridades_disponibles[1]['id'] if len(prioridades_disponibles) > 1 else 1,
+            ficha_tecnica=FichaTecnica(
+                diagnostico_probable="Pendiente de revisión manual",
+                piezas_necesarias=[],
+                repuestos_sugeridos=[],
+                protocolo_tecnico=["Revisar evidencias físicas"]
+            ),
+            recomendaciones_taller="Verificar el vehículo físicamente.",
+            motivo_rechazo=""
+        )

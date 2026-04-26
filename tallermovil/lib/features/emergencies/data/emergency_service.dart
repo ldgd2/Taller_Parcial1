@@ -54,4 +54,25 @@ class EmergencyService {
       throw Exception(e.response?.data?['detail'] ?? 'Error al cargar historial');
     }
   }
+
+  /// Actualiza una emergencia (ej: corregir una rechazada por IA)
+  Future<void> updateEmergency(int id, EmergencyReport report) async {
+    try {
+      await apiClient.dio.put(
+        '/emergencias/$id',
+        data: report.toJson(),
+      );
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['detail'] ?? 'Error al actualizar reporte');
+    }
+  }
+
+  /// Cancela una emergencia
+  Future<void> cancelEmergency(int id) async {
+    try {
+      await apiClient.dio.delete('/emergencias/$id');
+    } on DioException catch (e) {
+      throw Exception(e.response?.data?['detail'] ?? 'Error al cancelar emergencia');
+    }
+  }
 }

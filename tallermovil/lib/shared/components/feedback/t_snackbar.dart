@@ -34,4 +34,8 @@ class TSnackbar {
   static void success(BuildContext context, String message) {
     show(context, message: message, isSuccess: true);
   }
+
+  static void info(BuildContext context, String message) {
+    show(context, message: message);
+  }
 }

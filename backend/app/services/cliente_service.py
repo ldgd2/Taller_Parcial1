@@ -12,15 +12,12 @@ from app.core.security import hash_password
 from app.schemas.cliente import ClienteCreate, ClienteOut, ClienteSimpleCreate
 
 async def registrar_cliente_solo(data: ClienteSimpleCreate, db: AsyncSession) -> ClienteOut:
-    # Verificar correo único
     result = await db.execute(select(Cliente).where(Cliente.correo == data.correo))
     if result.scalar_one_or_none():
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="El correo electrónico ya está registrado.",
         )
-
-    # Crear cliente
     cliente = Cliente(
         nombre=data.nombre,
         correo=data.correo,
@@ -38,7 +35,6 @@ async def registrar_cliente_solo(data: ClienteSimpleCreate, db: AsyncSession) ->
     )
 
 async def registrar_cliente(data: ClienteCreate, db: AsyncSession) -> ClienteOut:
-    # 1. Crear el cliente primero
     cliente_simple = ClienteSimpleCreate(
         nombre=data.nombre,
         correo=data.correo,
@@ -46,7 +42,6 @@ async def registrar_cliente(data: ClienteCreate, db: AsyncSession) -> ClienteOut
     )
     cliente_out = await registrar_cliente_solo(cliente_simple, db)
 
-    # 2. Crear vehículo vinculado
     vehiculo = Vehiculo(
         placa=data.vehiculo.placa,
         marca=data.vehiculo.marca,
@@ -63,7 +58,6 @@ async def registrar_cliente(data: ClienteCreate, db: AsyncSession) -> ClienteOut
 
 
 async def registrar_vehiculo_extra(cliente_id: int, data: VehiculoCreate, db: AsyncSession):
-    # Verificamos si la placa ya existe
     result = await db.execute(select(Vehiculo).where(Vehiculo.placa == data.placa))
     if result.scalar_one_or_none():
         raise HTTPException(
@@ -79,7 +73,6 @@ async def registrar_vehiculo_extra(cliente_id: int, data: VehiculoCreate, db: As
         idCliente=cliente_id
     )
     db.add(nuevo_vehiculo)
-    # Commit delegamos pero podemos hacer flush para validarlo
     await db.flush()
     return nuevo_vehiculo
 

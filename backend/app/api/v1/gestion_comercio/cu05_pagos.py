@@ -22,12 +22,12 @@ from app.models.emergencia import Emergencia
 from app.models.estado import Estado
 from app.models.historial_estado import HistorialEstado
 from app.services import ai_service
-from app.schemas.ai_schemas import SimulacionCostoIA
 from app.core.config import settings
 from app.models.cliente import Cliente
 from app.models.metodo_pago import MetodoPago
 from app.schemas.metodo_pago import MetodoPagoOut, SetupIntentOut
 from app.schemas.pago import PagoStripeCreate, PagoOut, PagoCreate
+from app.core.socket_manager import manager
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -51,15 +51,13 @@ async def registrar_pago(
     Calcula automáticamente la comisión del 10% y el monto neto al taller.
     """
     # 1. Verificar que la emergencia existe
-    res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
+    from sqlalchemy.orm import joinedload
+    res = await db.execute(
+        select(Emergencia).options(joinedload(Emergencia.pago)).where(Emergencia.id == emergencia_id)
+    )
     emergencia = res.scalar_one_or_none()
     if not emergencia:
         raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
-
-    # 1.5 Verificar si ya existe un pago completado
-    pago_existente = await db.execute(select(Pago).where(Pago.emergencia_id == emergencia_id, Pago.estado == "COMPLETADO"))
-    if pago_existente.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Esta emergencia ya ha sido pagada.")
 
     # 2. Verificar que pertenece al taller del admin autenticado
     taller_cod = current.get("taller")
@@ -69,24 +67,38 @@ async def registrar_pago(
             detail="Esta emergencia no pertenece a tu taller.",
         )
 
+    # 2. Verificar o Recuperar el Pago
+    # Si la emergencia ya tiene un pago vinculado (a través de la relación), lo actualizamos
+    pago = emergencia.pago
+
     # 3. Calcular comisión de plataforma (10%)
     comision = data.monto * Decimal("0.10")
 
-    pago = Pago(
-        monto=data.monto,
-        monto_comision=comision,
-        cliente_id=emergencia.idCliente,
-        emergencia_id=emergencia.id,
-        estado="COMPLETADO",
-        fecha_pago=datetime.date.today(),
-    )
-    db.add(pago)
-    await db.flush()
+    if pago:
+        # Si ya estaba completado con monto > 0, no permitimos re-pagar
+        if pago.estado == "COMPLETADO" and pago.monto > 0:
+             raise HTTPException(status_code=400, detail="Esta emergencia ya ha sido pagada.")
+        
+        # Actualizamos el pago existente
+        pago.monto = data.monto
+        pago.monto_comision = comision
+        pago.estado = "COMPLETADO"
+        pago.fecha_pago = datetime.date.today()
+    else:
+        # Si por alguna razón no tiene pago vinculado, creamos uno nuevo
+        pago = Pago(
+            monto=data.monto,
+            monto_comision=comision,
+            cliente_id=emergencia.idCliente,
+            emergencia_id=emergencia.id,
+            estado="COMPLETADO",
+            fecha_pago=datetime.date.today(),
+        )
+        db.add(pago)
+        await db.flush()
 
-    # 4. Vincular pago a la emergencia y finalizar
-    emergencia.idPago = pago.id
-    
-    # Cambiar estado a FINALIZADA
+    # 4. Finalizar emergencia
+    # Cambiar estado a FINALIZADA (ID 8 sugerido)
     estado_fin_res = await db.execute(select(Estado).where(Estado.nombre == "FINALIZADA"))
     estado_fin = estado_fin_res.scalar_one_or_none()
     if estado_fin:
@@ -305,6 +317,13 @@ async def create_payment_intent(
                 idEstado=estado_fin.id
             )
             db.add(historial)
+            
+            # Notificar via WebSocket
+            await manager.send_personal_message({
+                "type": "pago_completado",
+                "emergencia_id": emergencia.id,
+                "monto": str(pago.monto)
+            }, str(cliente.id))
 
     await db.commit()
     await db.refresh(pago)
@@ -319,45 +338,26 @@ async def create_payment_intent(
 )
 async def obtener_pago(
     emergencia_id: int,
-    current=Depends(require_role("admin")),
+    current=Depends(require_role("admin", "cliente", "tecnico")),
     db: AsyncSession = Depends(get_db),
 ):
     """Retorna el registro de pago asociado a la emergencia, si existe."""
-    res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
-    emergencia = res.scalar_one_or_none()
-    if not emergencia or not emergencia.idPago:
-        raise HTTPException(status_code=404, detail="Pago no encontrado para esta emergencia.")
-
-    pago_res = await db.execute(select(Pago).where(Pago.id == emergencia.idPago))
-    return pago_res.scalar_one()
-
-@router.post(
-    "/simular/{emergencia_id}",
-    response_model=SimulacionCostoIA,
-    summary="CU05 — Simular costo de la emergencia con IA",
-)
-async def simular_pago(
-    emergencia_id: int,
-    db: AsyncSession = Depends(get_db),
-):
-    """
-    Usa la IA para estimar el costo del servicio basado en la falla reportada.
-    """
-    res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
+    from sqlalchemy.orm import joinedload
+    res = await db.execute(
+        select(Emergencia).options(joinedload(Emergencia.pago)).where(Emergencia.id == emergencia_id)
+    )
     emergencia = res.scalar_one_or_none()
     if not emergencia:
-        raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
 
-    # 1.5 Verificar si ya existe un pago completado
-    pago_existente = await db.execute(select(Pago).where(Pago.emergencia_id == emergencia_id, Pago.estado == "COMPLETADO"))
-    if pago_existente.scalar_one_or_none():
-        raise HTTPException(status_code=400, detail="Esta emergencia ya ha sido pagada.")
+    # Seguridad: Validar propiedad según el rol
+    if current["role"] == "cliente" and emergencia.idCliente != current["user_id"]:
+        raise HTTPException(status_code=403, detail="No tienes permiso para ver este pago")
+    elif current["role"] == "tecnico" and emergencia.idTaller != current.get("taller"):
+        raise HTTPException(status_code=403, detail="Esta emergencia no pertenece a tu taller")
+    # Los admins pueden ver cualquier pago por ahora para evitar bloqueos
 
-    vehiculo_str = emergencia.placaVehiculo
-    # Nota: Si el modelo tiene la relación 'vehiculo' cargada, la usamos
-    simulacion = await ai_service.simular_costo_servicio(
-        texto_crudo=emergencia.descripcion + " " + (emergencia.texto_adicional or ""),
-        vehiculo_info=vehiculo_str
-    )
+    if not emergencia.pago:
+        raise HTTPException(status_code=404, detail="Pago no registrado para esta emergencia")
     
-    return simulacion
+    return emergencia.pago

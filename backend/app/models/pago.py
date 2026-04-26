@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Numeric, Date, ForeignKey, func, JSON
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -17,8 +17,10 @@ class Pago(Base):
     metodo_pago_id = Column(String(255), nullable=True) # Payment Method ID
     estado = Column(String(50), nullable=False, server_default="PENDIENTE") # PENDIENTE, COMPLETADO, FALLIDO
     
+    detalle_factura = Column(JSON, nullable=True)
+    
     fecha_pago = Column("fechaPago", Date, nullable=False, server_default=func.current_date())
 
     # Relaciones
     cliente = relationship("Cliente", foreign_keys=[cliente_id])
-    emergencia = relationship("Emergencia", foreign_keys=[emergencia_id])
+    emergencia = relationship("Emergencia", foreign_keys=[emergencia_id], back_populates="pago")

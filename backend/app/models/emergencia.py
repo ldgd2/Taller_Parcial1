@@ -22,7 +22,6 @@ class Emergencia(Base):
     idCategoria = Column(Integer, ForeignKey("categoria_problema.id"), nullable=False)
     idCliente = Column(Integer, ForeignKey("cliente.id"), nullable=False, index=True)
     placaVehiculo = Column(String(20), ForeignKey("vehiculo.placa"), nullable=False, index=True)
-    idPago = Column(Integer, ForeignKey("pago.id"), nullable=True)
     idEstado = Column(Integer, ForeignKey("estado.id"), nullable=False, index=True, server_default="1") # 1 = INICIADA
 
     # Concurrencia/Mutex
@@ -38,13 +37,14 @@ class Emergencia(Base):
     categoria = relationship("CategoriaProblema")
     cliente = relationship("Cliente", back_populates="emergencias")
     vehiculo = relationship("Vehiculo", back_populates="emergencias")
-    pago = relationship("Pago", foreign_keys=[idPago])
+    pago = relationship("Pago", back_populates="emergencia", uselist=False, cascade="all, delete-orphan")
     estado = relationship("Estado")
-    evidencias = relationship("Evidencia", back_populates="emergencia")
-    historial = relationship("HistorialEstado", back_populates="emergencia")
-    resumen_ia = relationship("ResumenIA", back_populates="emergencia", uselist=False)
+    evidencias = relationship("Evidencia", back_populates="emergencia", cascade="all, delete-orphan")
+    historial = relationship("HistorialEstado", back_populates="emergencia", cascade="all, delete-orphan")
+    resumen_ia = relationship("ResumenIA", back_populates="emergencia", uselist=False, cascade="all, delete-orphan")
     
     # Técnicos asignados (Muchos a Muchos)
     tecnicos_asignados = relationship("Tecnico", secondary="asignacion_tecnico_emergencia", back_populates="emergencias_asignadas")
 
     locker = relationship("Taller", foreign_keys=[locked_by])
+    mensajes_chat = relationship("MensajeChat", back_populates="emergencia", cascade="all, delete-orphan")

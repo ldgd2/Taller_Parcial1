@@ -29,9 +29,11 @@ from app.models import *  # noqa: F401, F403
 from app.api.v1.perfil_seguridad import router as perfil_seguridad_router
 from app.api.v1.gestion_ia import router as gestion_ia_router
 from app.api.v1.gestion_comercio import router as gestion_comercio_router
+from app.api.v1.gestion_comercio.cu16_chat import router as chat_router
 
 # Catálogos (transversal — especialidades, prioridades, categorías)
 from app.api.v1.catalogos import router as catalogos_router
+from app.api.v1 import ws
 
 # ─── Inicializar Auditoría Universal ────────────────────────────
 register_audit_listeners(Base)
@@ -91,11 +93,15 @@ PREFIX = settings.API_V1_PREFIX
 # Paquete 1: Gestión Perfil y Seguridad (CU01/CU02/CU03/CU06/CU07/CU13)
 app.include_router(perfil_seguridad_router, prefix=PREFIX)
 
+# Paquete 3: Gestión Comercio (CU05/CU14/CU15/CU16)
+app.include_router(gestion_comercio_router, prefix=PREFIX)
+app.include_router(chat_router, prefix=PREFIX)
+
 # Paquete 2: Gestión IA (CU04/CU08/CU09/CU10/CU11/CU12)
 app.include_router(gestion_ia_router, prefix=PREFIX)
 
-# Paquete 3: Gestión Comercio (CU05/CU14/CU15)
-app.include_router(gestion_comercio_router, prefix=PREFIX)
+# WebSockets
+app.include_router(ws.router, prefix="/api/v1")
 
 # Catálogos (transversal — especialidades, prioridades, categorías)
 app.include_router(catalogos_router, prefix=PREFIX)

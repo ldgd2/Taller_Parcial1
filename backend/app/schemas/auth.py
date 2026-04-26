@@ -13,6 +13,7 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     rol: str
+    user_id: int
     nombre: str
     cod_taller: Optional[str] = None
     nombre_taller: Optional[str] = None

@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, delete
 import os
 from app.models.fcm_token import FCMToken
+from app.core.socket_manager import manager
 
 class NotificationService:
     _initialized = False
@@ -65,6 +66,14 @@ class NotificationService:
     @staticmethod
     async def enviar_notificacion_usuario(db: AsyncSession, user_id: int, titulo: str, cuerpo: str, data: dict = None):
         """Envía una notificación push a todos los dispositivos de un usuario."""
+        # 0. Notificación en tiempo real via WebSocket
+        await manager.send_personal_message({
+            "type": "notification",
+            "title": titulo,
+            "body": cuerpo,
+            "data": data
+        }, str(user_id))
+
         NotificationService.initialize()
         
         # Obtener tokens del usuario o cliente

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
@@ -13,7 +14,9 @@ import '../../../../shared/components/layout/t_spacing.dart';
 import '../../../../shared/components/typography/t_text.dart';
 import '../../../../shared/components/buttons/t_button.dart';
 import '../../../../shared/components/loaders/t_loader.dart';
+import '../../../chat/ui/chat_view.dart';
 import '../../../payments/views/payment_selection_view.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 class EmergencyDetailView extends StatefulWidget {
   final Map<String, dynamic> emergency;
@@ -31,6 +34,8 @@ class _EmergencyDetailViewState extends State<EmergencyDetailView> {
   Map<String, dynamic> _emergencyData = {};
   bool _isLoading = true;
 
+  StreamSubscription? _socketSubscription;
+
   @override
   void initState() {
     super.initState();
@@ -42,8 +47,10 @@ class _EmergencyDetailViewState extends State<EmergencyDetailView> {
         });
       }
     });
+
     _refreshData();
   }
+
 
   Future<void> _refreshData() async {
     try {
@@ -64,6 +71,7 @@ class _EmergencyDetailViewState extends State<EmergencyDetailView> {
 
   @override
   void dispose() {
+    _socketSubscription?.cancel();
     _audioPlayer.dispose();
     super.dispose();
   }
@@ -131,6 +139,46 @@ class _EmergencyDetailViewState extends State<EmergencyDetailView> {
     return Scaffold(
       appBar: AppBar(
         title: TText.h3('Detalle de Emergencia'),
+        actions: [
+          if (['PENDIENTE', 'INICIADA'].contains(e['estado_actual']?.toString().toUpperCase()))
+            IconButton(
+              icon: const Icon(Icons.cancel_outlined, color: AppColors.danger),
+              tooltip: 'Cancelar Reporte',
+              onPressed: () async {
+                bool? confirm = await showDialog<bool>(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: AppColors.surface,
+                    title: TText.h3('Cancelar Reporte'),
+                    content: TText.body('¿Estás seguro de que deseas cancelar este reporte?'),
+                    actions: [
+                      TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('VOLVER')),
+                      TextButton(
+                        onPressed: () => Navigator.pop(ctx, true), 
+                        child: const Text('SÍ, CANCELAR', style: TextStyle(color: AppColors.danger))
+                      ),
+                    ],
+                  ),
+                );
+                if (confirm == true) {
+                  try {
+                    final storage = LocalStorage();
+                    final apiClient = ApiClient(localStorage: storage);
+                    await apiClient.dio.delete('/emergencias/${e['id']}');
+                    if (mounted) {
+                      Navigator.pop(context, true); // Retornar true para refrescar home
+                    }
+                  } catch (e) {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error al cancelar: $e')),
+                      );
+                    }
+                  }
+                }
+              },
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24.0),
@@ -157,11 +205,12 @@ class _EmergencyDetailViewState extends State<EmergencyDetailView> {
 
             // SECCIÓN DE PAGO (Solo si está finalizado y TIENE MONTO)
             if ((['ATENDIDO', 'FINALIZADA'].contains(e['estado_actual']?.toString().toUpperCase()) || e['idPago'] != null) && (e['monto_pago'] ?? e['pago']?['monto']) != null) ...[
-              TText.h3('Pago del Servicio'),
+              TText.h3('Factura y Pago del Servicio'),
               TSpacing.verticalSmall(),
               TCard(
                 color: AppColors.successBg.withValues(alpha: 0.2),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -171,13 +220,76 @@ class _EmergencyDetailViewState extends State<EmergencyDetailView> {
                       ],
                     ),
                     TSpacing.verticalSmall(),
+
+                    // MOSTRAR DETALLE FACTURA SI EXISTE
+                    if (e['pago'] != null && e['pago']['detalle_factura'] != null) ...[
+                      const Divider(color: AppColors.border),
+                      TSpacing.verticalSmall(),
+                      TText.h3('Detalle de Factura', color: AppColors.primary),
+                      TSpacing.verticalSmall(),
+                      ...((e['pago']['detalle_factura']['items'] as List?)?.map((item) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 8.0),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${item['cantidad']}x ${item['descripcion']}',
+                                  style: const TextStyle(color: Colors.white, fontSize: 14),
+                                ),
+                              ),
+                              Text(
+                                '\$${item['total']}',
+                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        );
+                      }) ?? []),
+                      const Divider(color: AppColors.border),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Subtotal:', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                          Text('\$${e['pago']['detalle_factura']['subtotal']}', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                        ],
+                      ),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text('Impuestos:', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                          Text('\$${e['pago']['detalle_factura']['impuestos']}', style: const TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                        ],
+                      ),
+                      TSpacing.verticalMedium(),
+                      TButton(
+                        label: 'Descargar Factura PDF',
+                        icon: Icons.picture_as_pdf,
+                        variant: TButtonVariant.outline,
+                        onPressed: () async {
+                          final url = Uri.parse('${ApiClient.serverUrl}/facturacion/${e['idPago']}/pdf');
+                          if (await canLaunchUrl(url)) {
+                            await launchUrl(url, mode: LaunchMode.externalApplication);
+                          } else {
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(content: Text('No se pudo abrir el enlace del PDF')),
+                              );
+                            }
+                          }
+                        },
+                      ),
+                      TSpacing.verticalMedium(),
+                    ],
+
                     if (e['pago']?['estado'] == 'COMPLETADO') ...[
                       const Icon(Icons.check_circle, color: AppColors.success, size: 48),
                       TSpacing.verticalSmall(),
-                      TText.h3('SERVICIO PAGADO'),
-                      TText.body('El pago se realizó correctamente.'),
+                      Center(child: TText.h3('SERVICIO PAGADO')),
+                      Center(child: TText.body('El pago se realizó correctamente.')),
                     ] else ...[
-                      TText.label('El servicio ha finalizado. Por favor, procede al pago.'),
+                      Center(child: TText.label('El servicio ha finalizado. Por favor, procede al pago.')),
                       TSpacing.verticalMedium(),
                       _PaymentButton(emergency: e),
                     ],
@@ -339,6 +451,19 @@ class _EmergencyDetailViewState extends State<EmergencyDetailView> {
             TSpacing.verticalXLarge(),
           ],
         ),
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => ChatView(emergenciaId: e['id']),
+            ),
+          );
+        },
+        backgroundColor: AppColors.primary,
+        icon: const Icon(Icons.chat_bubble, color: Colors.white),
+        label: const Text('Chat con Taller', style: TextStyle(color: Colors.white)),
       ),
     );
   }

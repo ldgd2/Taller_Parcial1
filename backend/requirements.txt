@@ -18,3 +18,4 @@ faker>=25.0.0
 rich>=13.0.0
 questionary>=2.1.1
 stripe>=8.0.0
+fpdf2>=2.8.7

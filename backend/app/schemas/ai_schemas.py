@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List
+from typing import List, Optional
 
 class FichaTecnica(BaseModel):
     diagnostico_probable: str = Field(description="Deducción técnica del problema basada en los síntomas.")
@@ -14,16 +14,6 @@ class AnalisisEstructuradoIA(BaseModel):
     id_prioridad: int = Field(description="ID de la prioridad asignada.")
     ficha_tecnica: FichaTecnica = Field(description="Ficha técnica detallada para el mecánico.")
     es_valida: bool = Field(description="Determina si el reporte es una emergencia mecánica real de un vehículo.")
-    motivo_rechazo: str = Field(description="Si es_valida es falso, explica por qué (ej: broma, fuera de contexto, código python, etc).")
-    recomendaciones_taller: str = Field(description="Recomendaciones estratégicas para el taller sobre cómo abordar este cliente o este problema específico.")
+    motivo_rechazo: Optional[str] = Field(default="", description="Si es_valida es falso, explica por qué.")
+    recomendaciones_taller: str = Field(description="Recomendaciones estratégicas para el taller.")
 
-class ItemCosto(BaseModel):
-    item: str = Field(description="Nombre del servicio o repuesto.")
-    costo: float = Field(description="Costo estimado en USD o moneda local.")
-
-class SimulacionCostoIA(BaseModel):
-    mano_de_obra: float = Field(description="Costo base del servicio mecánico.")
-    repuestos_estimados: List[ItemCosto] = Field(description="Lista de posibles repuestos necesarios con sus costos.")
-    comision_sistema: float = Field(description="10% de ganancia para la plataforma.")
-    total_estimado: float = Field(description="Suma total de todos los rubros.")
-    justificacion_mercado: str = Field(description="Explicación de por qué se cobra ese monto basado en precios de mercado y tipo de falla.")

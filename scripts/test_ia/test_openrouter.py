@@ -7,6 +7,7 @@ if backend_path not in sys.path:
     sys.path.append(backend_path)
 
 import asyncio
+import json
 try:
     from app.services.ai_service import analizar_transcripcion_whisper
     from app.core._test_mocks import MOCK_CATEGORIAS, MOCK_PRIORIDADES
@@ -31,16 +32,41 @@ async def test_openrouter():
     ]
 
     print(f"Texto de entrada: {texto_prueba}")
-    print("Llamando a la IA...")
+    
+    # --- Prueba de Visión Interactiva ---
+    print("\n📸 ¿Deseas incluir imágenes para probar la visión? (s/n)")
+    incluir_fotos = input(">> ").lower() == 's'
+    evidencias = []
+    
+    if incluir_fotos:
+        print("Ingresa las URLs de las imágenes separadas por comas (o deja vacío para usar una de prueba):")
+        urls_raw = input(">> ").strip()
+        if urls_raw:
+            evidencias = [u.strip() for u in urls_raw.split(',')]
+        else:
+            # URL de prueba por defecto (una llanta pinchada de Google Images)
+            evidencias = ["https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcR_xN8J9x3G1v9B6V-y6Dq_E9uH_fPZ-zW7xw&s"]
+            print(f"Usando imagen de prueba: {evidencias[0]}")
+
+    print("\nLlamando a la IA...")
     try:
-        resultado = await analizar_transcripcion_whisper(texto_prueba, cats, prios)
-        print("\n[OK] ¡La IA respondió estructuradamente!")
-        print(f">> Resumen: {resultado.resumen}")
-        print(f">> ID Categoría: {resultado.id_categoria}")
-        print(f">> ID Prioridad: {resultado.id_prioridad}")
-        print(f">> Ficha Técnica: {resultado.ficha_tecnica.model_dump()}")
+        resultado = await analizar_transcripcion_whisper(
+            texto_prueba, 
+            cats, 
+            prios, 
+            vehiculo_info="Toyota Corolla 2022",
+            evidencias_urls=evidencias
+        )
+        print("\n[OK] ¡La IA respondió exitosamente!")
+        print(f">> Título: {resultado.titulo_emergencia}")
+        print(f">> Resumen: {resultado.resumen_taller}")
+        print(f">> Categoría Sugerida: {resultado.id_categoria}")
+        print(f">> Prioridad Sugerida: {resultado.id_prioridad}")
+        print(f">> Recomendaciones: {resultado.recomendaciones_taller}")
+        print(f"\n>> Ficha Técnica Generada:")
+        print(json.dumps(resultado.ficha_tecnica.model_dump(), indent=2, ensure_ascii=False))
     except Exception as e:
-        print(f"[ERROR] Hubo un fallo al conectar con OpenRouter o Instructor: {e}")
+        print(f"[ERROR] Hubo un fallo en la prueba: {e}")
 
 if __name__ == "__main__":
     asyncio.run(test_openrouter())

@@ -1,4 +1,4 @@
-import { Component, OnInit, AfterViewInit, OnDestroy } from '@angular/core';
+import { Component, OnInit, AfterViewInit, OnDestroy, ViewChild, ElementRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { LucideAngularModule } from 'lucide-angular';
@@ -6,6 +6,9 @@ import { ApiService } from '../../../core/api/api.service';
 import { toast } from 'ngx-sonner';
 import { FormsModule } from '@angular/forms';
 import { environment } from '../../../../environments/environment';
+import { SocketService } from '../../../core/services/socket.service';
+import { Subscription } from 'rxjs';
+import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import * as L from 'leaflet';
 
 @Component({
@@ -18,8 +21,7 @@ import * as L from 'leaflet';
       <!-- TOP NAVIGATION BAR -->
       <div class="h-20 bg-[#050505] border-b border-zinc-900 px-8 flex items-center justify-between sticky top-0 z-50 backdrop-blur-xl bg-opacity-80">
         <div class="flex items-center gap-6">
-          <button (click)="goBack()" 
-                  class="w-10 h-10 border border-zinc-800 flex items-center justify-center hover:bg-zinc-900 transition-all group">
+          <button (click)="goBack()" class="w-10 h-10 border border-zinc-800 flex items-center justify-center hover:bg-zinc-900 transition-all group">
             <lucide-icon name="arrow-left" class="text-zinc-600 group-hover:text-white" size="16"></lucide-icon>
           </button>
           <div>
@@ -33,319 +35,254 @@ import * as L from 'leaflet';
         </div>
 
         <div class="flex gap-4">
-           <button *ngIf="emergency?.idTaller === currentWorkshop && emergency?.estado_actual !== 'CANCELADO'"
-                   (click)="openFichaModal()"
-                   class="border border-zinc-700 text-zinc-300 hover:text-primary hover:border-primary px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all">
-             Editar Ficha CU10
-           </button>
-           <button *ngIf="emergency?.idTaller === currentWorkshop && (emergency?.estado_actual === 'ASIGNADO' || emergency?.estado_actual === 'EN_PROCESO')"
-                   (click)="showPagoModal = true"
-                   class="bg-emerald-600 text-white px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all hover:bg-emerald-500 shadow-lg">
-             Finalizar Trabajo
-           </button>
-           <button *ngIf="emergency?.estado_actual === 'ATENDIDO' && !pagoExistente"
-                   (click)="showPagoModal = true"
-                   class="border border-emerald-700 text-emerald-400 hover:bg-emerald-900/20 px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all">
-             Registrar Pago CU05
-           </button>
-           <div *ngIf="pagoExistente" class="flex flex-col items-end gap-1 px-6 py-3 bg-emerald-900/20 border border-emerald-700 animate-in fade-in duration-300">
-             <div class="flex items-center gap-2">
-                <div class="w-1.5 h-1.5 rounded-full" [ngClass]="pagoExistente.estado === 'COMPLETADO' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]' : 'bg-yellow-500'"></div>
-                <span class="font-mono text-[9px] uppercase text-emerald-400 tracking-widest">PAGO: $ {{ pagoExistente.monto }}</span>
-             </div>
-             <span class="text-[7px] uppercase font-bold tracking-widest" [ngClass]="pagoExistente.estado === 'COMPLETADO' ? 'text-emerald-500' : 'text-yellow-500/70'">
-               {{ pagoExistente.estado === 'COMPLETADO' ? 'PAGO CONFIRMADO' : 'ESPERANDO PAGO...' }}
-             </span>
-           </div>
-           <button *ngIf="emergency?.estado_actual === 'PENDIENTE' || emergency?.estado_actual === 'INICIADA'"
-                   (click)="openAssignModal()"
-                   [disabled]="emergency?.is_locked && emergency?.locked_by !== currentWorkshop"
-                   class="bg-primary text-white px-8 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all shadow-[0_10px_20px_rgba(255,87,51,0.2)]">
-             {{ emergency?.is_locked ? 'Continuar Asignación' : 'Reclamar Misión' }}
-           </button>
+            <button *ngIf="!emergency?.idTaller && emergency?.estado_actual !== 'CANCELADO'"
+                    (click)="openAssignModal()"
+                    class="bg-red-600 text-white px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all hover:bg-red-500 shadow-[0_0_20px_rgba(220,38,38,0.4)] flex items-center gap-2">
+              <lucide-icon name="shield-alert" size="14"></lucide-icon>
+              Asignar Misión
+            </button>
+            <button *ngIf="emergency?.idTaller === currentWorkshop && emergency?.estado_actual !== 'CANCELADO' && emergency?.estado_actual !== 'FINALIZADA'"
+                   (click)="openChat()"
+                   class="border border-blue-700 text-blue-400 hover:bg-blue-900/20 px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all flex items-center gap-2">
+              <lucide-icon name="message-square" size="14"></lucide-icon>
+              Chat Directo
+            </button>
+            <button *ngIf="emergency?.idTaller === currentWorkshop && emergency?.estado_actual !== 'CANCELADO'"
+                    (click)="openFichaModal()"
+                    class="border border-zinc-700 text-zinc-300 hover:text-primary hover:border-primary px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all">
+              Editar Ficha
+            </button>
+            <button *ngIf="emergency?.idTaller === currentWorkshop && (emergency?.estado_actual === 'ASIGNADO' || emergency?.estado_actual === 'EN_PROCESO')"
+                    (click)="showPagoModal = true"
+                    class="bg-emerald-600 text-white px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all hover:bg-emerald-500 shadow-lg">
+              Finalizar
+            </button>
+            <button *ngIf="(emergency?.estado_actual === 'ATENDIDO' || emergency?.estado_actual === 'FINALIZADA') && emergency?.pago"
+                    (click)="downloadFactura()"
+                    class="bg-blue-600 text-white px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all hover:bg-blue-500 flex items-center gap-2">
+              <lucide-icon name="download" size="14"></lucide-icon>
+              Factura PDF
+            </button>
         </div>
       </div>
 
       <!-- LOADING STATE -->
       <div *ngIf="loading" class="flex-1 flex flex-col items-center justify-center gap-6 py-40">
-        <div class="w-16 h-16 border-2 border-primary border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(255,87,51,0.3)]"></div>
+        <div class="w-16 h-16 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
         <p class="font-mono text-[10px] uppercase tracking-[.4em] text-zinc-600">Sincronizando Telemetría...</p>
       </div>
 
       <ng-container *ngIf="!loading && emergency">
-        <!-- PANORAMIC MAP SECTION -->
-        <div class="relative w-full h-[450px] border-b border-zinc-900 overflow-hidden group">
+        <!-- MAP SECTION -->
+        <div class="relative w-full h-[400px] border-b border-zinc-900 overflow-hidden">
            <div id="emergency-map" class="absolute inset-0 z-0 bg-black"></div>
-           
-           <!-- DATA HUD OVERLAY -->
            <div class="absolute inset-x-0 bottom-0 p-8 flex justify-between items-end z-10 pointer-events-none">
-              <!-- HUD LEFT: ADDRESS -->
-              <div class="bg-black/80 backdrop-blur-md border border-zinc-800 p-6 shadow-2xl animate-in slide-in-from-left duration-700 pointer-events-auto">
-                 <div class="flex items-center gap-3 mb-3">
-                   <lucide-icon name="map-pin" class="text-primary" size="16"></lucide-icon>
-                   <span class="font-bold text-xs uppercase tracking-widest text-white">{{ emergency.direccion }}</span>
+              <div class="bg-black/80 backdrop-blur-md border border-zinc-800 p-6 pointer-events-auto">
+                 <div class="flex items-center gap-3 mb-2">
+                   <lucide-icon name="map-pin" class="text-primary" size="14"></lucide-icon>
+                   <span class="font-bold text-[10px] uppercase tracking-widest text-white">{{ emergency.direccion }}</span>
                  </div>
-                 <div class="flex gap-6 items-center">
-                    <div class="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">
-                       SEC_LAT: {{ emergency.latitud }}
-                    </div>
-                    <div class="font-mono text-[10px] text-zinc-500 uppercase tracking-widest">
-                       SEC_LNG: {{ emergency.longitud }}
-                    </div>
-                 </div>
-              </div>
-
-              <!-- HUD RIGHT: TELEMETRY -->
-              <div class="flex gap-px bg-zinc-900 border border-zinc-800 shadow-2xl overflow-hidden animate-in slide-in-from-right duration-700 pointer-events-auto">
-                 <div class="bg-black/90 p-5 min-w-[140px] text-center">
-                    <div class="text-[8px] text-zinc-500 uppercase mb-2 tracking-[.25em]">Distancia Ruta</div>
-                    <div class="font-mono font-bold text-xl text-primary">{{ telemetry.distance || '--.-' }} <span class="text-[10px] text-zinc-600">KM</span></div>
-                 </div>
-                 <div class="bg-black/90 p-5 min-w-[140px] text-center border-l border-zinc-900">
-                    <div class="text-[8px] text-zinc-500 uppercase mb-2 tracking-[.25em]">ETA Estimado</div>
-                    <div class="font-mono font-bold text-xl text-emerald-500">{{ telemetry.duration || '--' }} <span class="text-[10px] text-zinc-600">MIN</span></div>
-                 </div>
-                 <div class="bg-black/90 p-5 flex flex-col items-center justify-center border-l border-zinc-900">
-                    <div class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.8)]"></div>
-                    <span class="text-[8px] font-bold text-zinc-600 uppercase mt-2 tracking-widest">LIVE</span>
-                 </div>
-              </div>
-           </div>
-
-           <!-- HUD TOP: SAT STATUS -->
-           <div class="absolute top-6 right-8 bg-black/40 backdrop-blur-sm border border-zinc-800/50 px-4 py-2 flex items-center gap-3 z-10 pointer-events-none">
-              <span class="text-[9px] font-mono text-emerald-500/80 tracking-[.3em]">OSRM_SAT_FEED: ACTIVE</span>
-              <div class="w-1 h-3 bg-emerald-500/20 rounded-full flex flex-col justify-end">
-                 <div class="w-full h-2/3 bg-emerald-500 rounded-full"></div>
               </div>
            </div>
         </div>
 
-        <!-- CONTENT GRID -->
+        <!-- CONTENT -->
         <div class="max-w-[1400px] mx-auto grid grid-cols-1 lg:grid-cols-12 gap-px bg-zinc-900">
-          
-          <!-- TECHNICAL DETAILS -->
-          <div class="lg:col-span-8 bg-[#050505] p-10 lg:p-14 space-y-20 border-r border-zinc-900">
-            
-            <!-- IA HEADLINE -->
+          <div class="lg:col-span-8 bg-[#050505] p-10 lg:p-14 space-y-12">
             <div class="space-y-4">
-               <div class="flex items-center gap-3 opacity-50">
-                  <lucide-icon name="radio" size="12"></lucide-icon>
-                  <span class="font-mono text-[9px] uppercase tracking-[.4em]">Resumen de Inteligencia Operativa</span>
-               </div>
-               <h2 class="text-3xl font-light italic leading-snug text-zinc-200">
-                 "{{ emergency.resumen_ia?.resumen || 'Sin resumen disponible' }}"
-               </h2>
+               <h2 class="text-2xl font-light italic text-zinc-200">"{{ emergency.resumen_ia?.resumen }}"</h2>
             </div>
-
-            <!-- TECHNICAL CARDS -->
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-12 pt-10 border-t border-zinc-900">
-              <div class="space-y-6">
-                <h3 class="font-bold text-[10px] uppercase tracking-[.4em] text-primary flex items-center gap-3">
-                   <div class="w-1.5 h-1.5 bg-primary"></div> Diagnóstico Probable
-                </h3>
-                <p class="text-sm text-zinc-400 font-mono leading-relaxed bg-[#0a0a0a] p-6 border border-zinc-900">
-                   {{ getFichaField('diagnostico_probable')[0] }}
-                </p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-8 border-t border-zinc-900">
+              <div class="space-y-4">
+                <h3 class="font-bold text-[9px] uppercase tracking-widest text-primary">Diagnóstico Probable</h3>
+                <p class="text-xs text-zinc-400 font-mono">{{ getFichaField('diagnostico_probable')[0] }}</p>
               </div>
-
-              <div class="space-y-6">
-                <h3 class="font-bold text-[10px] uppercase tracking-[.4em] text-zinc-400 flex items-center gap-3">
-                   <div class="w-1.5 h-1.5 bg-zinc-800"></div> Piezas Comprometidas
-                </h3>
-                <ul class="space-y-3">
-                  <li *ngFor="let item of getFichaField('piezas_necesarias')" class="flex gap-4 items-center bg-zinc-900/50 border border-zinc-900 px-5 py-3 font-mono text-xs text-zinc-500">
-                    <span class="text-zinc-800">#</span> {{ item }}
-                  </li>
-                </ul>
-              </div>
-
-              <div class="space-y-6">
-                <h3 class="font-bold text-[10px] uppercase tracking-[.4em] text-emerald-500 flex items-center gap-3 font-mono">
-                   <div class="w-1.5 h-1.5 bg-emerald-500"></div> Kit de Respuesta (Qué llevar)
-                </h3>
-                <div class="grid grid-cols-1 gap-2">
-                   <div *ngFor="let item of getFichaField('repuestos_sugeridos')" class="bg-emerald-500/5 border-l-2 border-emerald-500/20 px-5 py-4 text-[11px] font-bold uppercase tracking-widest text-emerald-500/80">
-                   {{ item }}
-                   </div>
-                </div>
-              </div>
-
-              <div class="space-y-6 bg-zinc-900/10 p-8 border border-zinc-900/50">
-                <h3 class="font-bold text-[10px] uppercase tracking-[.4em] text-zinc-500 flex items-center gap-3">
-                   <lucide-icon name="shield-alert" size="14"></lucide-icon> Recomendaciones Críticas
-                </h3>
-                <ul class="space-y-4">
-                  <li *ngFor="let item of getFichaField('acciones_inmediatas')" class="font-mono text-[11px] text-zinc-600 italic border-l border-zinc-800 pl-4 py-1">
-                    {{ item }}
-                  </li>
-                </ul>
+              <div class="space-y-4">
+                <h3 class="font-bold text-[9px] uppercase tracking-widest text-zinc-400">Piezas Necesarias</h3>
+                <p class="text-xs text-zinc-400 font-mono">{{ getFichaField('piezas_necesarias').join(', ') }}</p>
               </div>
             </div>
           </div>
-
-          <!-- SIDEBAR METADATA -->
-          <div class="lg:col-span-4 bg-[#080808] p-10 lg:p-14 space-y-12">
-             <section class="space-y-6">
-                <h3 class="text-[10px] font-bold uppercase tracking-[.4em] text-zinc-600">Datos del Vehículo</h3>
-                <div class="bg-zinc-950 border border-zinc-900 p-8 space-y-6">
-                   <div>
-                      <div class="text-[9px] text-zinc-700 uppercase mb-2 tracking-widest">Marca / Modelo</div>
-                      <div class="text-lg font-bold">{{ emergency.vehiculo?.marca }} {{ emergency.vehiculo?.modelo }}</div>
-                   </div>
-                   <div class="grid grid-cols-2 gap-4">
-                      <div>
-                         <div class="text-[9px] text-zinc-700 uppercase mb-2 tracking-widest">Matrícula</div>
-                         <div class="font-mono font-bold">{{ emergency.vehiculo?.placa }}</div>
-                      </div>
-                      <div>
-                         <div class="text-[9px] text-zinc-700 uppercase mb-2 tracking-widest">Año</div>
-                         <div class="font-mono font-bold">{{ emergency.vehiculo?.anio }}</div>
-                      </div>
-                   </div>
+          <div class="lg:col-span-4 bg-[#080808] p-10 space-y-10">
+             <section class="space-y-4">
+                <h3 class="text-[9px] font-bold uppercase tracking-widest text-zinc-600">Vehículo</h3>
+                <div class="bg-zinc-950 border border-zinc-900 p-6">
+                   <div class="text-sm font-bold">{{ emergency.vehiculo?.marca }} {{ emergency.vehiculo?.modelo }}</div>
+                   <div class="text-[10px] font-mono text-zinc-500 mt-1">{{ emergency.vehiculo?.placa }}</div>
                 </div>
              </section>
-
-             <section class="space-y-6">
-                <h3 class="text-[10px] font-bold uppercase tracking-[.4em] text-zinc-600">Reporte del Sistema</h3>
-                <div class="bg-[#050505] border border-dashed border-zinc-800 p-8 font-mono text-[11px] text-zinc-500 leading-relaxed uppercase tracking-tighter">
-                   {{ emergency.texto_adicional || 'NO_ADDITIONAL_TEXT_DETECTED' }}
-                </div>
-             </section>
-
-              <section *ngIf="emergency.evidencias?.length" class="space-y-6">
-                 <h3 class="text-[10px] font-bold uppercase tracking-[.4em] text-zinc-600">Telemetría Visual</h3>
-                 <div class="grid grid-cols-2 gap-px bg-zinc-900 border border-zinc-900">
-                    <div *ngFor="let img of emergency.evidencias" class="aspect-square bg-[#050505] overflow-hidden group">
-                       <img [src]="getImageUrl(img.direccion)" class="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-all duration-500 group-hover:scale-110">
-                    </div>
-                 </div>
-              </section>
-           </div>
-
+          </div>
         </div>
       </ng-container>
 
-      <!-- ASSIGNMENT MODAL -->
-      <div *ngIf="showModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6 backdrop-blur-sm bg-black/60 animate-in fade-in duration-300">
-         <div class="bg-[#0a0a0a] border border-zinc-800 w-full max-w-2xl overflow-hidden animate-in zoom-in-95 duration-300 shadow-3xl">
-            <div class="p-8 border-b border-zinc-900 flex justify-between items-center">
-               <h2 class="font-bold text-lg uppercase tracking-widest">Asignación Operativa</h2>
-               <button (click)="showModal = false" class="text-zinc-600 hover:text-white transition-colors">
-                  <lucide-icon name="x" size="20"></lucide-icon>
-               </button>
+      <!-- MODALS -->
+      <div *ngIf="showModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+         <div class="bg-zinc-950 border border-zinc-800 w-full max-w-xl">
+            <div class="p-6 border-b border-zinc-900 flex justify-between items-center">
+               <h2 class="font-bold text-xs uppercase tracking-widest">Asignación</h2>
+               <button (click)="showModal = false"><lucide-icon name="x" size="18"></lucide-icon></button>
             </div>
+            <div class="p-8 space-y-8">
+               <div class="space-y-2">
+                 <h3 class="text-[10px] font-bold uppercase tracking-[.3em] text-zinc-500">Seleccionar Personal Operativo</h3>
+                 <p class="text-[11px] text-zinc-400 font-mono italic">Seleccione uno o más técnicos para esta intervención.</p>
+               </div>
 
-            <div class="p-8 space-y-8 max-h-[60vh] overflow-y-auto">
-               <div class="grid grid-cols-1 gap-px bg-zinc-900">
+               <div *ngIf="loadingTechs" class="py-12 flex justify-center">
+                  <div class="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin"></div>
+               </div>
+
+               <div *ngIf="!loadingTechs" class="grid grid-cols-1 gap-3 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
                   <div *ngFor="let tech of availableTechs" 
                        (click)="toggleTech(tech.id)"
-                       [class.bg-zinc-900]="selectedTechs.includes(tech.id)"
-                       class="bg-[#050505] p-6 flex items-center justify-between cursor-pointer group hover:bg-zinc-950 transition-colors">
-                     <div class="flex items-center gap-4">
-                        <div [class.bg-emerald-500]="selectedTechs.includes(tech.id)"
-                             class="w-4 h-4 border border-zinc-800 transition-colors flex items-center justify-center">
-                           <lucide-icon *ngIf="selectedTechs.includes(tech.id)" name="chevrons-right" class="text-black" size="8"></lucide-icon>
-                        </div>
-                        <div>
-                           <div class="font-bold text-sm" [class.text-emerald-500]="selectedTechs.includes(tech.id)">{{ tech.nombre }}</div>
-                           <div class="text-[9px] uppercase tracking-widest text-zinc-600 mt-1">{{ tech.especialidades?.[0]?.nombre || 'GENERAL' }}</div>
-                        </div>
+                       [class]="selectedTechs.includes(tech.id) ? 'border-primary bg-primary/10' : 'border-zinc-800 bg-zinc-900/30'"
+                       class="p-4 border cursor-pointer transition-all hover:bg-zinc-900 flex justify-between items-center group">
+                    <div>
+                      <div class="text-xs font-bold uppercase tracking-tight" [class.text-primary]="selectedTechs.includes(tech.id)">{{ tech.nombre }}</div>
+                      <div class="flex gap-2 mt-1">
+                        <span *ngFor="let esp of tech.especialidades" class="text-[8px] uppercase tracking-tighter text-zinc-500">
+                          #{{ esp.nombre }}
+                        </span>
+                      </div>
+                    </div>
+                    <div class="w-5 h-5 border flex items-center justify-center transition-colors"
+                         [class]="selectedTechs.includes(tech.id) ? 'bg-primary border-primary' : 'border-zinc-700'">
+                       <lucide-icon *ngIf="selectedTechs.includes(tech.id)" name="check" size="12" class="text-black"></lucide-icon>
+                    </div>
+                  </div>
+               </div>
+
+               <div class="pt-6 border-t border-zinc-900 flex flex-col gap-4">
+                  <div class="flex justify-between items-center text-[10px] font-mono">
+                     <span class="text-zinc-500 uppercase">Técnicos Seleccionados</span>
+                     <span class="text-white font-bold">{{ selectedTechs.length }}</span>
+                  </div>
+                  <button (click)="confirmAssignment()" 
+                          [disabled]="selectedTechs.length === 0"
+                          class="w-full bg-primary disabled:bg-zinc-800 disabled:text-zinc-600 text-black py-4 font-bold text-[10px] uppercase tracking-[.3em] transition-all hover:bg-white active:scale-[0.98]">
+                    Confirmar Misión
+                  </button>
+               </div>
+            </div>
+         </div>
+      </div>
+
+      <div *ngIf="showPagoModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm overflow-y-auto">
+         <div class="bg-zinc-950 border border-emerald-900 w-full max-w-2xl my-8">
+            <div class="p-6 border-b border-zinc-900 flex justify-between items-center">
+               <h2 class="font-bold text-xs uppercase tracking-widest text-emerald-400">Generar Factura y Finalizar</h2>
+               <button (click)="showPagoModal = false"><lucide-icon name="x" size="18"></lucide-icon></button>
+            </div>
+            <div class="p-6 space-y-6">
+               <!-- Header -->
+               <div class="flex justify-between items-end border-b border-zinc-900 pb-4">
+                  <div class="text-[11px] text-zinc-400">Items de Facturación</div>
+                  <button (click)="addFacturaItem()" class="px-4 py-2 bg-zinc-900 hover:bg-zinc-800 text-white text-[10px] uppercase tracking-widest font-bold">
+                    + Añadir Ítem
+                  </button>
+               </div>
+               
+               <!-- Items List -->
+               <div class="space-y-3 max-h-[40vh] overflow-y-auto pr-2">
+                 <div *ngFor="let item of facturaItems; let i = index" class="flex gap-2 items-center p-3 border border-zinc-900 bg-black/50">
+                   <div class="flex-1 space-y-2">
+                     <input [(ngModel)]="item.descripcion" placeholder="Descripción (Ej. Cambio Aceite)" class="w-full bg-transparent border-b border-zinc-800 p-2 text-sm outline-none focus:border-emerald-500">
+                     <div class="flex gap-2">
+                       <select [(ngModel)]="item.tipo" class="bg-zinc-900 border border-zinc-800 p-2 text-xs outline-none text-white w-1/3">
+                         <option value="servicio">Servicio</option>
+                         <option value="repuesto">Repuesto</option>
+                       </select>
+                       <input [(ngModel)]="item.cantidad" (ngModelChange)="calcItemTotal(item)" type="number" min="1" placeholder="Cant." class="w-1/4 bg-zinc-900 border border-zinc-800 p-2 text-xs outline-none text-center">
+                       <input [(ngModel)]="item.precio_unitario" (ngModelChange)="calcItemTotal(item)" type="number" min="0" placeholder="Precio Un." class="w-1/3 bg-zinc-900 border border-zinc-800 p-2 text-xs outline-none text-right">
                      </div>
-                     <span class="font-mono text-[9px] text-zinc-500">ID#{{ tech.id }}</span>
+                   </div>
+                   <div class="w-24 text-right font-mono text-emerald-400 font-bold p-2">
+                     $ {{ item.total | number:'1.2-2' }}
+                   </div>
+                   <button (click)="removeFacturaItem(i)" class="p-2 text-zinc-500 hover:text-red-500 transition-colors">
+                     <lucide-icon name="trash-2" size="16"></lucide-icon>
+                   </button>
+                 </div>
+               </div>
+
+               <!-- Totals -->
+               <div class="bg-black border border-zinc-900 p-4 space-y-2 font-mono text-xs">
+                 <div class="flex justify-between text-zinc-400">
+                   <span>Subtotal:</span>
+                   <span>$ {{ facturaSubtotal | number:'1.2-2' }}</span>
+                 </div>
+                 <div class="flex justify-between text-zinc-400">
+                   <span>Impuestos (Opcional):</span>
+                   <input [(ngModel)]="facturaImpuestos" (ngModelChange)="calcFacturaTotal()" type="number" class="w-24 bg-transparent border-b border-zinc-800 text-right outline-none">
+                 </div>
+                 <div class="flex justify-between font-bold text-emerald-400 text-lg border-t border-zinc-900 pt-2 mt-2">
+                   <span>Total General:</span>
+                   <span>$ {{ facturaTotalGeneral | number:'1.2-2' }}</span>
+                 </div>
+               </div>
+               
+               <button (click)="registrarPago()" [disabled]="facturaItems.length === 0" class="w-full bg-emerald-700 disabled:bg-zinc-800 disabled:text-zinc-500 py-4 font-bold text-[10px] uppercase tracking-widest transition-colors hover:bg-emerald-600">Emitir Factura y Finalizar</button>
+            </div>
+         </div>
+      </div>
+
+      <div *ngIf="showChatModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+         <div class="bg-zinc-950 border border-zinc-800 w-full max-w-lg h-[70vh] flex flex-col">
+            <div class="p-4 border-b border-zinc-900 flex justify-between items-center bg-zinc-900/50">
+               <h2 class="font-bold text-[10px] uppercase tracking-widest">Chat Operativo</h2>
+               <button (click)="closeChat()"><lucide-icon name="x" size="18"></lucide-icon></button>
+            </div>
+            <div #chatContainer class="flex-1 overflow-y-auto p-6 space-y-4">
+               <div *ngFor="let msg of chatMessages" class="flex flex-col" [ngClass]="msg.rol_remitente === 'cliente' ? 'items-start' : 'items-end'">
+                  <div class="max-w-[85%] p-3 border text-[11px] rounded-lg shadow-sm" [ngClass]="msg.rol_remitente === 'cliente' ? 'bg-zinc-900 border-zinc-800' : 'bg-blue-900/20 border-blue-800/50'">
+                     <img *ngIf="msg.imagen_url" [src]="getImageUrl(msg.imagen_url)" class="w-full rounded mb-2 cursor-pointer hover:opacity-90 transition-opacity" (click)="fullScreenImage = msg.imagen_url">
+                     <audio *ngIf="msg.audio_url" controls [src]="getImageUrl(msg.audio_url)" class="w-[240px] h-[40px] mt-1 bg-zinc-100 rounded-full"></audio>
+                     <p *ngIf="msg.contenido" class="mt-1 text-[13px]">{{ msg.contenido }}</p>
                   </div>
                </div>
             </div>
-
-            <div class="p-8 border-t border-zinc-900 bg-zinc-950 flex gap-4">
-               <button (click)="showModal = false" class="flex-1 py-4 font-bold text-[10px] uppercase tracking-widest text-zinc-500 hover:text-white">Abortar</button>
-               <button (click)="confirmAssignment()" 
-                       [disabled]="selectedTechs.length === 0"
-                       class="flex-1 bg-primary text-white py-4 font-bold text-[10px] uppercase tracking-widest disabled:opacity-30">
-                  Confirmar Misión
+            <div class="p-3 bg-zinc-900/30 border-t border-zinc-900 flex gap-2 items-center">
+               <button (click)="fileInput.click()" class="text-zinc-400 hover:text-white p-2 transition-colors" title="Subir archivo">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+               </button>
+               <input type="file" #fileInput (change)="onChatFileSelected($event)" class="hidden" accept="image/*,audio/*">
+               
+               <input [(ngModel)]="newChatMessage" (keyup.enter)="sendChatMessage()" placeholder="Escribe..." class="flex-1 bg-black border border-zinc-800 p-3 text-[11px] outline-none">
+               
+               <button (pointerdown)="onMicPointerDown($event)" (pointerup)="onMicPointerUp($event)" (pointerleave)="onMicPointerUp($event)"
+                       [ngClass]="isRecording ? 'text-red-500 animate-pulse' : 'text-zinc-400 hover:text-white'" 
+                       class="p-2 transition-colors cursor-pointer" title="Grabar (Clic o Mantener)">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="22"></line></svg>
+               </button>
+               
+               <button (click)="sendChatMessage()" class="bg-blue-600 p-3 text-white flex items-center justify-center hover:bg-blue-500 transition-colors">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
                </button>
             </div>
          </div>
       </div>
 
-      <!-- MODAL: REGISTRAR PAGO (CU05) -->
-      <div *ngIf="showPagoModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-        <div class="bg-zinc-950 border border-emerald-900 w-full max-w-md shadow-2xl animate-in zoom-in-95 duration-300">
-          <div class="p-8 border-b border-zinc-900 flex justify-between items-center">
-            <div>
-              <h2 class="font-bold text-lg uppercase tracking-widest text-emerald-400">Registrar Pago — CU05</h2>
-              <p class="font-mono text-[9px] text-zinc-600 uppercase tracking-widest mt-1">Emergencia {{ emergency?.id }} · Servicio finalizado</p>
-            </div>
-            <button (click)="showPagoModal = false" class="text-zinc-600 hover:text-white"><lucide-icon name="x" size="20"></lucide-icon></button>
-          </div>
-          <div class="p-8 space-y-6">
-            <div class="space-y-2">
-              <label class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500">Monto Total del Servicio (USD)</label>
-              <input [(ngModel)]="pagoMonto" type="number" placeholder="0.00"
-                     class="w-full bg-[#050505] border border-zinc-800 px-4 py-3 text-sm focus:border-emerald-500 outline-none font-mono text-2xl">
-            </div>
-            <div class="bg-zinc-900/50 border border-zinc-800 p-4 font-mono text-[10px] text-zinc-500 space-y-1">
-              <div class="flex justify-between"><span>Monto del servicio:</span> <span class="text-white">$ {{ pagoMonto || 0 }}</span></div>
-              <div class="flex justify-between"><span>Comisión plataforma (10%):</span> <span class="text-primary">$ {{ ((pagoMonto || 0) * 0.10).toFixed(2) }}</span></div>
-              <div class="flex justify-between font-bold border-t border-zinc-800 pt-2 mt-2"><span>Neto al taller:</span> <span class="text-emerald-400">$ {{ ((pagoMonto || 0) * 0.90).toFixed(2) }}</span></div>
-            </div>
-          </div>
-          <div class="p-8 bg-zinc-900/30 flex gap-4">
-            <button (click)="showPagoModal = false" class="flex-1 py-4 font-bold text-[10px] uppercase tracking-widest text-zinc-500 hover:text-white">Cancelar</button>
-            <button (click)="registrarPago()" [disabled]="!pagoMonto"
-                    class="flex-1 bg-emerald-700 hover:bg-emerald-600 text-white py-4 font-bold text-[10px] uppercase tracking-widest disabled:opacity-30">
-              Confirmar Pago
-            </button>
-          </div>
-        </div>
+      <!-- Modal Pantalla Completa Imagen (Chat) -->
+      <div *ngIf="fullScreenImage" class="fixed inset-0 z-[200] flex items-center justify-center bg-black/95 p-4 backdrop-blur-md" (click)="fullScreenImage = null">
+         <button class="absolute top-6 right-6 text-zinc-400 hover:text-white transition-colors bg-zinc-900/50 rounded-full p-2" (click)="fullScreenImage = null">
+            <lucide-icon name="x" size="24"></lucide-icon>
+         </button>
+         <img [src]="getImageUrl(fullScreenImage)" class="max-w-full max-h-[90vh] object-contain rounded-md" (click)="$event.stopPropagation()">
       </div>
 
-      <!-- MODAL: EDITAR FICHA TÉCNICA (CU10) -->
-      <div *ngIf="showFichaModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm animate-in fade-in duration-300">
-        <div class="bg-zinc-950 border border-zinc-800 w-full max-w-2xl max-h-[90vh] overflow-y-auto shadow-2xl animate-in zoom-in-95 duration-300">
-          <div class="p-8 border-b border-zinc-900 flex justify-between items-center">
-            <div>
-              <h2 class="font-bold text-lg uppercase tracking-widest">Editar Ficha Técnica — CU10</h2>
-              <p class="font-mono text-[9px] text-zinc-600 uppercase tracking-widest mt-1">Completa con los datos reales del servicio</p>
+      <div *ngIf="showFichaModal" class="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+         <div class="bg-zinc-950 border border-zinc-800 w-full max-w-xl">
+            <div class="p-6 border-b border-zinc-900 flex justify-between items-center">
+               <h2 class="font-bold text-xs uppercase tracking-widest">Ficha Técnica</h2>
+               <button (click)="showFichaModal = false"><lucide-icon name="x" size="18"></lucide-icon></button>
             </div>
-            <button (click)="showFichaModal = false" class="text-zinc-600 hover:text-white"><lucide-icon name="x" size="20"></lucide-icon></button>
-          </div>
-          <div class="p-8 space-y-6">
-            <div class="space-y-2">
-              <label class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500">Resumen del Servicio</label>
-              <textarea [(ngModel)]="fichaEdit.resumen" rows="3"
-                        class="w-full bg-[#050505] border border-zinc-800 px-4 py-3 text-sm focus:border-primary outline-none resize-none"></textarea>
+            <div class="p-6 space-y-4">
+               <textarea [(ngModel)]="fichaEdit.resumen" rows="3" class="w-full bg-black border border-zinc-800 p-3 text-[11px]"></textarea>
+               <button (click)="saveFicha()" class="w-full bg-primary py-4 font-bold text-[10px] uppercase">Guardar</button>
             </div>
-            <div class="space-y-2">
-              <label class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500">Diagnóstico Real (separado por comas)</label>
-              <input [(ngModel)]="fichaEdit.ficha_tecnica.diagnostico_probable" type="text"
-                     class="w-full bg-[#050505] border border-zinc-800 px-4 py-3 text-sm focus:border-primary outline-none">
-            </div>
-            <div class="space-y-2">
-              <label class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500">Piezas Utilizadas (separado por comas)</label>
-              <input [(ngModel)]="fichaEdit.ficha_tecnica.piezas_necesarias" type="text"
-                     class="w-full bg-[#050505] border border-zinc-800 px-4 py-3 text-sm focus:border-primary outline-none">
-            </div>
-            <div class="space-y-2">
-              <label class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500">Repuestos Instalados (separado por comas)</label>
-              <input [(ngModel)]="fichaEdit.ficha_tecnica.repuestos_sugeridos" type="text"
-                     class="w-full bg-[#050505] border border-zinc-800 px-4 py-3 text-sm focus:border-primary outline-none">
-            </div>
-            <div class="space-y-2">
-              <label class="font-mono text-[9px] uppercase tracking-[.25em] text-zinc-500">Acciones Realizadas (separado por comas)</label>
-              <input [(ngModel)]="fichaEdit.ficha_tecnica.acciones_inmediatas" type="text"
-                     class="w-full bg-[#050505] border border-zinc-800 px-4 py-3 text-sm focus:border-primary outline-none">
-            </div>
-          </div>
-          <div class="p-8 bg-zinc-900/30 flex gap-4 sticky bottom-0">
-            <button (click)="showFichaModal = false" class="flex-1 py-4 font-bold text-[10px] uppercase tracking-widest text-zinc-500 hover:text-white">Cancelar</button>
-            <button (click)="saveFicha()"
-                    class="flex-1 bg-primary text-white py-4 font-bold text-[10px] uppercase tracking-widest">
-              Guardar Ficha Real
-            </button>
-          </div>
-        </div>
+         </div>
       </div>
+
     </div>
   `,
   styles: [`
@@ -392,20 +329,60 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
   private map: L.Map | null = null;
   private routeLayer: L.GeoJSON | null = null;
 
+  // Chat logic
+  showChatModal = false;
+  chatMessages: any[] = [];
+  newChatMessage = '';
+  chatFile: File | null = null;
+  fullScreenImage: string | null = null;
+
+  private socketSub?: Subscription;
+
   constructor(
     private route: ActivatedRoute,
     private router: Router,
-    private api: ApiService
+    private api: ApiService,
+    private socketService: SocketService,
+    private sanitizer: DomSanitizer
   ) {}
 
   ngOnInit() {
     this.loadDetail();
+    this.initSocket();
+  }
+
+  private initSocket() {
+    const workshopId = localStorage.getItem('cod_taller') || 'anonymous';
+    this.socketService.connect(workshopId);
+
+    if (this.socketSub) this.socketSub.unsubscribe();
+    this.socketSub = this.socketService.getMessages().subscribe(msg => {
+      // Verificar si es un mensaje de chat para esta emergencia específica
+      if (msg.type === 'chat_message' && msg.idEmergencia == this.emergency?.id) {
+        // Evitar duplicados (por si el mensaje que enviamos nosotros también llega por socket)
+        const exists = this.chatMessages.some(m => m.id === msg.id);
+        if (!exists) {
+          this.chatMessages.push(msg);
+          this.scrollToBottom();
+          // Si el modal no está abierto, podríamos mostrar una notificación
+          if (!this.showChatModal) {
+            toast.info('Nuevo mensaje del cliente');
+          }
+        }
+      }
+    });
+  }
+
+  private scrollToBottom() {
+    setTimeout(() => {
+      const container = document.querySelector('.overflow-y-auto');
+      if (container) container.scrollTop = container.scrollHeight;
+    }, 100);
   }
 
   ngOnDestroy() {
-    if (this.map) {
-      this.map.remove();
-    }
+    if (this.socketSub) this.socketSub.unsubscribe();
+    if (this.map) this.map.remove();
   }
 
   loadDetail() {
@@ -413,6 +390,8 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
     if (!id) return;
     
     this.loading = true;
+    this.emergency = null;
+    this.pagoExistente = null;
     
     // 1. Cargar detalle de emergencia
     this.api.get<any>(`/gestion-emergencia/${id}`).subscribe({
@@ -497,14 +476,14 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
     fetch(url)
       .then(res => res.json())
       .then(data => {
-        if (data.code === 'Ok' && data.routes.length > 0) {
+        if (data.code === 'Ok' && data.routes.length > 0 && this.map) {
           const route = data.routes[0];
           
           // Draw Route
-          if (this.routeLayer) this.map?.removeLayer(this.routeLayer);
+          if (this.routeLayer) this.map.removeLayer(this.routeLayer);
           this.routeLayer = L.geoJSON(route.geometry, {
             style: { color: '#FF5733', weight: 4, opacity: 0.8 }
-          }).addTo(this.map!);
+          }).addTo(this.map);
 
           // Update Telemetry
           this.telemetry.distance = (route.distance / 1000).toFixed(1);
@@ -521,12 +500,18 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
     return ['SIN_DATA_DETECTED'];
   }
 
-  getImageUrl(path: string): string {
+  getImageUrl(path: string): SafeUrl | string {
     if (!path) return '';
-    if (path.startsWith('http')) return path;
-    // El backend sirve estáticos en /uploads/
-    const serverUrl = environment.apiUrl.replace('/api/v1', '');
-    return `${serverUrl}/uploads/${path}`;
+    let finalUrl = path;
+    
+    if (!path.startsWith('http')) {
+      const cleanPath = path.startsWith('uploads/') ? path : `uploads/${path}`;
+      const serverUrl = environment.apiUrl.replace('/api/v1', '');
+      const base = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl;
+      finalUrl = `${base}/${cleanPath}`;
+    }
+    
+    return this.sanitizer.bypassSecurityTrustUrl(finalUrl);
   }
 
   openAssignModal() {
@@ -609,6 +594,7 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
 
   // ─── CU05: Gestionar Tipo de Pago ────────────────────────────────
   cargarPago() {
+    if (!this.emergency || !this.emergency.id) return;
     this.api.get<any>(`/pagos/${this.emergency.id}`).subscribe({
       next: (res) => { this.pagoExistente = res; },
       error: () => { 
@@ -617,22 +603,195 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
     });
   }
 
+  // ─── INVOICE LOGIC ───────────────────────────────────────────────
+  facturaItems: any[] = [];
+  facturaSubtotal = 0;
+  facturaImpuestos = 0;
+  facturaTotalGeneral = 0;
+
+  addFacturaItem() {
+    this.facturaItems.push({
+      descripcion: '',
+      tipo: 'servicio',
+      cantidad: 1,
+      precio_unitario: 0,
+      total: 0
+    });
+  }
+
+  removeFacturaItem(index: number) {
+    this.facturaItems.splice(index, 1);
+    this.calcFacturaTotal();
+  }
+
+  calcItemTotal(item: any) {
+    item.total = item.cantidad * item.precio_unitario;
+    this.calcFacturaTotal();
+  }
+
+  calcFacturaTotal() {
+    this.facturaSubtotal = this.facturaItems.reduce((acc, item) => acc + item.total, 0);
+    this.facturaTotalGeneral = this.facturaSubtotal + (this.facturaImpuestos || 0);
+  }
+
   registrarPago() {
-    if (!this.pagoMonto || this.pagoMonto <= 0) {
-      toast.error('Ingresa un monto válido');
+    if (this.facturaItems.length === 0) {
+      toast.error('Agrega al menos un ítem a la factura');
       return;
     }
     
-    // Llamamos al nuevo endpoint de finalización
-    this.api.post(`/talleres/solicitudes/${this.emergency.id}/finalizar`, { 
-      monto_total: this.pagoMonto 
-    }).subscribe({
+    // Validar items
+    for (let item of this.facturaItems) {
+      if (!item.descripcion || item.precio_unitario < 0) {
+        toast.error('Completa todos los campos de la factura correctamente');
+        return;
+      }
+    }
+
+    const payload = {
+      monto_total: this.facturaTotalGeneral,
+      factura: {
+        items: this.facturaItems,
+        subtotal: this.facturaSubtotal,
+        impuestos: this.facturaImpuestos,
+        total_general: this.facturaTotalGeneral
+      }
+    };
+    
+    this.api.post(`/talleres/solicitudes/${this.emergency.id}/finalizar`, payload).subscribe({
       next: (res) => {
-        toast.success(`Servicio finalizado. Notificación de pago enviada al cliente.`);
+        toast.success(`Factura emitida y notificada al cliente.`);
         this.showPagoModal = false;
         this.loadDetail();
       },
-      error: (err) => toast.error('Error al finalizar servicio', { description: err.error?.detail })
+      error: (err) => toast.error('Error al emitir factura', { description: err.error?.detail })
     });
+  }
+
+  downloadFactura() {
+    const url = environment.apiUrl ? environment.apiUrl.replace('/api/v1', '') : 'http://localhost:8000';
+    window.open(`${url}/api/v1/facturacion/${this.emergency.id}/pdf`, '_blank');
+  }
+
+  // ─── CHAT METHODS ───────────────────────────────────────────────
+  openChat() {
+    this.showChatModal = true;
+    this.loadChatHistory();
+  }
+
+  closeChat() {
+    this.showChatModal = false;
+  }
+
+  loadChatHistory() {
+    if (!this.emergency) return;
+    this.api.get<any[]>(`/chat/${this.emergency.id}`).subscribe(res => {
+      this.chatMessages = res;
+      this.scrollToBottom();
+    });
+  }
+
+  sendChatMessage() {
+    if (!this.newChatMessage.trim() && !this.chatFile) return;
+
+    if (this.chatFile) {
+       this.uploadChatFile();
+       return;
+    }
+
+    const payload = { contenido: this.newChatMessage };
+    this.newChatMessage = ''; // Vaciar instantáneamente para mejor UX
+    this.api.post(`/chat/${this.emergency.id}`, payload).subscribe(res => {
+       // El mensaje llegará por WebSocket o ya lo añadimos localmente si queremos
+    });
+  }
+
+  onChatFileSelected(event: any) {
+    this.chatFile = event.target.files[0];
+    if (this.chatFile) this.uploadChatFile();
+  }
+
+  uploadChatFile() {
+    if (!this.chatFile) return;
+    const formData = new FormData();
+    formData.append('file', this.chatFile);
+
+    this.api.post(`/chat/${this.emergency.id}/upload_media`, formData).subscribe(res => {
+       this.chatFile = null;
+       this.newChatMessage = '';
+    });
+  }
+
+  // ─── AUDIO RECORDING ─────────────────────────────────────────────
+  isRecording = false;
+  mediaRecorder: MediaRecorder | null = null;
+  audioChunks: Blob[] = [];
+  
+  private recordingTimer: any;
+  private isLongPress = false;
+
+  onMicPointerDown(event: PointerEvent) {
+    // Si ya está grabando, significa que lo activó con un clic anterior. Detenemos y enviamos.
+    if (this.isRecording) {
+      this.stopRecording();
+      return;
+    }
+    
+    // Iniciar grabación
+    this.startRecording();
+    this.isLongPress = false;
+    
+    // Después de 300ms, lo consideramos "mantener presionado"
+    this.recordingTimer = setTimeout(() => {
+      this.isLongPress = true;
+    }, 300);
+  }
+
+  onMicPointerUp(event: PointerEvent) {
+    clearTimeout(this.recordingTimer);
+    // Solo detenemos si fue un "mantener presionado" prolongado. Si fue un clic rápido, lo ignoramos y dejamos grabando.
+    if (this.isLongPress && this.isRecording) {
+      this.stopRecording();
+    }
+  }
+
+  async startRecording() {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      toast.error('Tu navegador no soporta grabación de audio.');
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      this.mediaRecorder = new MediaRecorder(stream);
+      this.audioChunks = [];
+
+      this.mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          this.audioChunks.push(event.data);
+        }
+      };
+
+      this.mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(this.audioChunks, { type: 'audio/webm' });
+        this.chatFile = new File([audioBlob], `audio_${Date.now()}.webm`, { type: 'audio/webm' });
+        this.uploadChatFile();
+        
+        // Detener los tracks del micrófono
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      this.mediaRecorder.start();
+      this.isRecording = true;
+    } catch (err) {
+      console.error('Error al acceder al micrófono:', err);
+      toast.error('No se pudo acceder al micrófono.');
+    }
+  }
+
+  stopRecording() {
+    if (this.mediaRecorder && this.isRecording) {
+      this.mediaRecorder.stop();
+      this.isRecording = false;
+    }
   }
 }

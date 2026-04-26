@@ -11,7 +11,8 @@ import 'package:tallermovil/shared/components/typography/t_text.dart';
 import 'report_emergency_controller.dart';
 
 class ReportEmergencyView extends StatefulWidget {
-  const ReportEmergencyView({super.key});
+  final Map<String, dynamic>? existingEmergency;
+  const ReportEmergencyView({super.key, this.existingEmergency});
 
   @override
   State<ReportEmergencyView> createState() => _ReportEmergencyViewState();
@@ -23,7 +24,7 @@ class _ReportEmergencyViewState extends State<ReportEmergencyView> {
   @override
   void initState() {
     super.initState();
-    controller = ReportEmergencyController();
+    controller = ReportEmergencyController(existingEmergency: widget.existingEmergency);
   }
 
   @override

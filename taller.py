@@ -25,7 +25,7 @@ try:
 except ImportError:
     pass
 
-from scripts import cmd_setup, cmd_db, cmd_run, cmd_deploy, cmd_test, cmd_config, cmd_network, cmd_dashboard
+from scripts import cmd_setup, cmd_db, cmd_run, cmd_deploy, cmd_test, cmd_config, cmd_network, cmd_dashboard, cmd_vps
 
 def print_banner():
     banner = """
@@ -105,6 +105,7 @@ def interactive_menu():
                 "Configuración Inicial (.env)",
                 "Base de Datos (SQLAlchemy/Alembic)",
                 "Ejecución de Servidores",
+                "Gestión VPS (Servicios Auto-Restart)",
                 "Pruebas y QA (IA/Whisper)",
                 "Instalación de Dependencias",
                 "Estadísticas y Ganancias (Dashboard Admin)",
@@ -132,6 +133,8 @@ def interactive_menu():
             cmd_db.interactive_menu()
         elif "Servidores" in category:
             cmd_run.interactive_menu()
+        elif "VPS" in category:
+            cmd_vps.interactive_menu()
         elif "Pruebas" in category:
             cmd_test.interactive_menu()
         elif "Instalación" in category:

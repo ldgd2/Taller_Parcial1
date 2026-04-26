@@ -22,6 +22,7 @@ from app.models.tecnico import Tecnico
 from app.models.asignacion_especialidad import AsignacionEspecialidad
 from app.schemas.emergencia import EmergenciaCreate, EmergenciaOut, ActualizarEstadoRequest
 from sqlalchemy.orm import selectinload, joinedload
+from app.core.config import settings
 from app.services.ai_service import analizar_transcripcion_whisper
 from typing import List
 import math
@@ -59,8 +60,9 @@ async def reportar_emergencia(
     resumen_taller = ""
     ficha_tecnica = None
 
-    # CU08, CU09, CU10: IA processing si hay texto
-    if data.texto_adicional:
+    # CU08, CU09, CU10: IA processing si hay texto o imágenes
+    print(f"Evaluando IA: texto={bool(data.texto_adicional)}, fotos={len(data.evidencias_urls)}")
+    if data.texto_adicional or data.evidencias_urls:
         try:
             # Obtener catálogos para el prompt de IA
             cats_res = await db.execute(select(CategoriaProblema.id, CategoriaProblema.descripcion))
@@ -69,12 +71,27 @@ async def reportar_emergencia(
             categorias_activas = [{"id": r.id, "nombre": r.descripcion} for r in cats_res.all()]
             prioridades_activas = [{"id": r.id, "nombre": r.descripcion} for r in prios_res.all()]
 
-            # Llamada al servicio de IA OpenRouter + Instructor
+            # Construir URLs completas
+            # Si el path ya empieza con uploads/, no lo duplicamos
+            base_url_simple = f"http://{settings.APP_HOST}:8000"
+            full_urls = []
+            for u in data.evidencias_urls:
+                if u.startswith('http'):
+                    full_urls.append(u)
+                elif u.startswith('uploads/'):
+                    full_urls.append(f"{base_url_simple}/{u}")
+                else:
+                    full_urls.append(f"{base_url_simple}/uploads/{u}")
+
+            print(f"🖼️ URLs enviadas a IA: {full_urls}")
+
+            # Llamada al servicio de IA OpenRouter + Instructor (Multi-modal)
             ia_result = await analizar_transcripcion_whisper(
-                texto_crudo=data.texto_adicional,
+                texto_crudo=data.texto_adicional or "Sin descripción (ver fotos)",
                 vehiculo_info=vehiculo_contexto,
                 categorias_disponibles=categorias_activas,
-                prioridades_disponibles=prioridades_activas
+                prioridades_disponibles=prioridades_activas,
+                evidencias_urls=full_urls
             )
 
             # Reemplazar valores base con los dictaminados por la IA
@@ -109,6 +126,18 @@ async def reportar_emergencia(
     db.add(emergencia)
     await db.flush()
 
+    # CU05: Crear pago inicial en 0 para evitar nulos (Modo Failsafe)
+    from app.models.pago import Pago
+    pago_inicial = Pago(
+        monto=0,
+        monto_comision=0,
+        cliente_id=cliente_id,
+        emergencia_id=emergencia.id,
+        estado="PENDIENTE"
+    )
+    db.add(pago_inicial)
+    await db.flush()
+
     # Guardar Evidencias (Fotos)
     from app.models.evidencia import Evidencia
     for url in data.evidencias_urls:
@@ -129,12 +158,28 @@ async def reportar_emergencia(
             idEmergencia=emergencia.id
         )
         db.add(resumen_ia)
-        # Si la IA dice que no es válida, actualizamos la emergencia
         if 'ia_result' in locals():
             emergencia.es_valida = ia_result.es_valida
+            
+            if not ia_result.es_valida:
+                try:
+                    from app.services.chat_service import enviar_notificacion_push
+                    await enviar_notificacion_push(
+                        user_id=cliente.idUsuario,
+                        title="Reporte Requiere Corrección",
+                        body=f"La IA no pudo validar tu reporte: {ia_result.motivo_rechazo}. Por favor, corrige los datos o cancela.",
+                        data={
+                            "tipo": "emergencia_invalida",
+                            "emergencia_id": str(emergencia.id),
+                            "motivo": ia_result.motivo_rechazo
+                        }
+                    )
+                except Exception as e:
+                    print(f"Error enviando notificacion de rechazo IA: {e}")
+        
         await db.flush()
 
-    # Registrar estado inicial -> PENDIENTE
+
     estado_res = await db.execute(select(Estado).where(Estado.nombre == "PENDIENTE"))
     estado = estado_res.scalar_one_or_none()
     if estado is None:
@@ -174,9 +219,7 @@ async def obtener_emergencia_detalle(id: int, db: AsyncSession):
 
 def _populate_dynamic_fields(e: Emergencia):
     """Calcula campos que no estn en la tabla base para el esquema de salida."""
-    # 1. Estado Actual
     if e.historial:
-        # El ms reciente por fechaCambio o por ID si las fechas son iguales
         last_h = sorted(e.historial, key=lambda x: (x.fecha_cambio, x.id), reverse=True)[0]
         e.estado_actual = last_h.estado.nombre
     else:
@@ -499,8 +542,13 @@ async def finalizar_emergencia(
     
     try:
         # 1. Validar emergencia
-        res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
-        emergencia = res.scalar_one_or_none()
+        stmt = (
+            select(Emergencia)
+            .where(Emergencia.id == emergencia_id)
+            .options(selectinload(Emergencia.pago))
+        )
+        res = await db.execute(stmt)
+        emergencia = res.unique().scalar_one_or_none()
         
         if not emergencia:
             raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
@@ -509,8 +557,14 @@ async def finalizar_emergencia(
             print(f"DEBUG 403: e.idTaller={emergencia.idTaller}, user.taller={taller_cod}")
             raise HTTPException(status_code=403, detail="No tienes acceso a esta emergencia.")
 
-        # 2. Crear Pago
-        monto_raw = data.get("monto_total", 0)
+        # 2. Actualizar o Crear Pago
+        factura = data.get("factura", None)
+        
+        if factura and isinstance(factura, dict):
+            monto_raw = factura.get("total_general", data.get("monto_total", 0))
+        else:
+            monto_raw = data.get("monto_total", 0)
+            
         try:
             monto = float(monto_raw)
         except:
@@ -518,18 +572,34 @@ async def finalizar_emergencia(
             
         comision = monto * 0.10
         
-        nuevo_pago = Pago(
-            monto=monto,
-            monto_comision=comision,
-            cliente_id=emergencia.idCliente,
-            emergencia_id=emergencia_id,
-            estado="PENDIENTE"
-        )
-        db.add(nuevo_pago)
-        await db.flush()
+        # Log para depuración de IntegrityError
+        print(f"DEBUG PAGOS: idCliente={emergencia.idCliente}, idEmergencia={emergencia_id}, monto={monto}")
         
-        # 3. Actualizar Emergencia
-        emergencia.idPago = nuevo_pago.id
+        if emergencia.pago:
+            pago = emergencia.pago
+            pago.monto = monto
+            pago.monto_comision = comision
+            pago.estado = "PENDIENTE" # Sigue pendiente hasta que el cliente pague
+            pago.detalle_factura = factura
+        else:
+            # Aseguramos que los IDs no sean nulos
+            c_id = emergencia.idCliente
+            e_id = emergencia_id
+            
+            if c_id is None or e_id is None:
+                print(f"ERROR: No se puede crear pago con IDs nulos. c_id={c_id}, e_id={e_id}")
+                raise HTTPException(status_code=500, detail="Error de integridad: Datos de cliente o emergencia faltantes.")
+
+            nuevo_pago = Pago(
+                monto=monto,
+                monto_comision=comision,
+                cliente_id=c_id,
+                emergencia_id=e_id,
+                estado="PENDIENTE",
+                detalle_factura=factura
+            )
+            db.add(nuevo_pago)
+            await db.flush()
         
         # Cambiar a estado ATENDIDO (ID 6 según check_states.py)
         emergencia.idEstado = 6
@@ -557,7 +627,13 @@ async def finalizar_emergencia(
         except Exception as e:
             print(f"Error enviando notificación de finalización: {e}")
 
-        return {"status": "ok", "message": "Emergencia finalizada y cliente notificado."}
+        return {
+            "status": "ok", 
+            "message": "Emergencia finalizada y cliente notificado.",
+            "monto_total": monto,
+            "monto_comision": comision,
+            "monto_taller": monto - comision
+        }
 
     except HTTPException:
         raise
@@ -568,3 +644,148 @@ async def finalizar_emergencia(
         with open("error_log.txt", "a") as f:
             f.write("\n" + "="*50 + "\n" + error_msg + "\n")
         raise HTTPException(status_code=500, detail="Error interno del servidor al finalizar.")
+async def actualizar_emergencia(id_emergencia: int, data: EmergenciaCreate, user_id: int, db: AsyncSession):
+    # 1. Verificar propiedad y estado
+    res = await db.execute(select(Emergencia).where(Emergencia.id == id_emergencia))
+    emergencia = res.scalar_one_or_none()
+    if not emergencia:
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
+    
+    # Solo el dueño puede editar
+    if emergencia.idCliente != user_id:
+         raise HTTPException(status_code=403, detail="No tienes permiso para editar esta emergencia")
+
+    # Solo se puede editar si no ha sido aceptada (idEstado de PENDIENTE)
+    estado_pend_res = await db.execute(select(Estado).where(Estado.nombre == "PENDIENTE"))
+    estado_pend = estado_pend_res.scalar_one()
+    if emergencia.idEstado != estado_pend.id:
+        raise HTTPException(status_code=400, detail="No se puede editar una emergencia que ya está siendo atendida")
+
+    # 2. Actualizar datos básicos
+    emergencia.descripcion = data.descripcion
+    emergencia.latitud = data.latitud
+    emergencia.longitud = data.longitud
+    emergencia.direccion = data.direccion
+    emergencia.audio_url = data.audio_url
+    
+    # 3. Re-procesar IA si hay texto o imágenes
+    print(f"🔍 [Update] Evaluando IA: texto={bool(data.texto_adicional)}, fotos={len(data.evidencias_urls)}")
+    if data.texto_adicional or data.evidencias_urls:
+        from app.services.ai_service import analizar_transcripcion_whisper
+        from app.core.config import settings
+
+        # Contexto del vehículo
+        veh_res = await db.execute(select(Vehiculo).where(Vehiculo.placa == data.placaVehiculo))
+        veh = veh_res.scalar_one_or_none()
+        vehiculo_contexto = f"{veh.marca} {veh.modelo} ({veh.anio})" if veh else ""
+
+        # Categorías y Prioridades activas
+        cats_res = await db.execute(select(CategoriaProblema.id, CategoriaProblema.descripcion))
+        prios_res = await db.execute(select(Prioridad.id, Prioridad.descripcion))
+        categorias_activas = [{"id": r.id, "nombre": r.descripcion} for r in cats_res.all()]
+        prioridades_activas = [{"id": r.id, "nombre": r.descripcion} for r in prios_res.all()]
+
+        # Construir URLs completas
+        base_url_simple = f"http://{settings.APP_HOST}:8000"
+        full_urls = []
+        for u in data.evidencias_urls:
+            if u.startswith('http'):
+                full_urls.append(u)
+            elif u.startswith('uploads/'):
+                full_urls.append(f"{base_url_simple}/{u}")
+            else:
+                full_urls.append(f"{base_url_simple}/uploads/{u}")
+
+        print(f"🖼️ [Update] URLs enviadas a IA: {full_urls}")
+        
+        ia_result = await analizar_transcripcion_whisper(
+            texto_crudo=data.texto_adicional or data.descripcion or "Sin descripción",
+            vehiculo_info=vehiculo_contexto,
+            categorias_disponibles=categorias_activas,
+            prioridades_disponibles=prioridades_activas,
+            evidencias_urls=full_urls
+        )
+
+        # 4. Actualizar Resumen IA
+        resumen_res = await db.execute(select(ResumenIA).where(ResumenIA.idEmergencia == id_emergencia))
+        resumen_ia = resumen_res.scalar_one_or_none()
+        
+        ficha_tecnica = ia_result.ficha_tecnica.model_dump() if ia_result.ficha_tecnica else {}
+        resumen_taller = ia_result.resumen_taller
+
+        if resumen_ia:
+            resumen_ia.resumen = resumen_taller
+            resumen_ia.ficha_tecnica = ficha_tecnica
+            resumen_ia.recomendaciones_taller = ia_result.recomendaciones_taller
+            resumen_ia.motivo_rechazo = ia_result.motivo_rechazo
+        else:
+            resumen_ia = ResumenIA(
+                resumen=resumen_taller,
+                ficha_tecnica=ficha_tecnica,
+                recomendaciones_taller=ia_result.recomendaciones_taller,
+                motivo_rechazo=ia_result.motivo_rechazo,
+                idEmergencia=emergencia.id
+            )
+            db.add(resumen_ia)
+
+        # Actualizar flags y clasificación
+        emergencia.es_valida = ia_result.es_valida
+        emergencia.idCategoria = ia_result.id_categoria
+        emergencia.idPrioridad = ia_result.id_prioridad 
+
+    # 5. Actualizar Evidencias (Borrar antiguas y poner nuevas)
+    from app.models.evidencia import Evidencia
+    from sqlalchemy import delete
+    await db.execute(delete(Evidencia).where(Evidencia.idEmergencia == id_emergencia))
+    
+    for url in data.evidencias_urls:
+        evidencia = Evidencia(direccion=url, idEmergencia=id_emergencia)
+        db.add(evidencia)
+
+    await db.commit()
+    await db.refresh(emergencia)
+    return emergencia
+
+async def cancelar_emergencia(id_emergencia: int, user_id: int, db: AsyncSession):
+    res = await db.execute(
+        select(Emergencia).where(Emergencia.id == id_emergencia)
+    )
+    emergencia = res.scalar_one_or_none()
+    
+    if not emergencia:
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
+    
+    if emergencia.idCliente != user_id:
+         raise HTTPException(status_code=403, detail="No tienes permiso para eliminar esta emergencia")
+
+    if emergencia.idTaller is not None:
+        raise HTTPException(
+            status_code=400, 
+            detail="No se puede eliminar una emergencia que ya ha sido aceptada por un taller. Intente contactar con soporte."
+        )
+
+    await db.delete(emergencia)
+    await db.commit()
+    
+    return {"status": "success", "message": "Emergencia eliminada permanentemente"}
+async def obtener_emergencia_por_id(emergencia_id: int, db: AsyncSession) -> Emergencia:
+    stmt = (
+        select(Emergencia)
+        .options(
+            selectinload(Emergencia.resumen_ia),
+            selectinload(Emergencia.evidencias),
+            selectinload(Emergencia.tecnicos_asignados).selectinload(Tecnico.especialidades),
+            selectinload(Emergencia.historial).joinedload(HistorialEstado.estado),
+            joinedload(Emergencia.vehiculo),
+            joinedload(Emergencia.estado),
+            joinedload(Emergencia.pago)
+        )
+        .where(Emergencia.id == emergencia_id)
+    )
+    result = await db.execute(stmt)
+    emergencia = result.scalar_one_or_none()
+    if not emergencia:
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
+    
+    _populate_dynamic_fields(emergencia)
+    return emergencia

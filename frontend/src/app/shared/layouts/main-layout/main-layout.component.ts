@@ -107,6 +107,7 @@ export class MainLayoutComponent implements OnInit {
   
   navItems = [
     { label: 'Tablero', icon: 'layout-dashboard', path: '/app/dashboard' },
+    { label: 'Reportes', icon: 'trending-up', path: '/app/reportes' },
     { label: 'Mis Trabajos', icon: 'briefcase', path: '/app/trabajos' },
     { label: 'Técnicos', icon: 'users', path: '/app/tecnicos' },
     { label: 'Mis Talleres', icon: 'factory', path: '/app/talleres' },

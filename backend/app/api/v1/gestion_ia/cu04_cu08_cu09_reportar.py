@@ -129,4 +129,43 @@ async def reportar(
     El cliente envía los datos de la emergencia (ya clasificada por IA).
     El motor de asignación (CU11) selecciona automáticamente el taller más cercano.
     """
+    print(f"[Endpoint] Reportar emergencia: {data.placaVehiculo}, texto={data.texto_adicional}, fotos={len(data.evidencias_urls)}")
     return await emergencia_service.reportar_emergencia(data, current["user_id"], db)
+
+
+@router.get("/{emergencia_id}", response_model=EmergenciaOut)
+async def obtener_emergencia(
+    emergencia_id: int,
+    current=Depends(require_role("cliente", "taller")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Obtener detalles de una emergencia específica.
+    """
+    return await emergencia_service.obtener_emergencia_por_id(emergencia_id, db)
+
+
+@router.put("/{emergencia_id}", response_model=EmergenciaOut)
+async def actualizar_emergencia(
+    emergencia_id: int,
+    data: EmergenciaCreate,
+    current=Depends(require_role("cliente")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Permite al cliente corregir un reporte rechazado por la IA o actualizar datos.
+    """
+    print(f"🔄 [Endpoint] Corregir emergencia {emergencia_id}: texto={data.texto_adicional}, fotos={len(data.evidencias_urls)}")
+    return await emergencia_service.actualizar_emergencia(emergencia_id, data, current["user_id"], db)
+
+
+@router.delete("/{emergencia_id}")
+async def cancelar_emergencia(
+    emergencia_id: int,
+    current=Depends(require_role("cliente")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Cancela una emergencia que aún no ha sido aceptada por un taller.
+    """
+    return await emergencia_service.cancelar_emergencia(emergencia_id, current["user_id"], db)

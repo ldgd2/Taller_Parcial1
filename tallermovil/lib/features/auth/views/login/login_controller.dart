@@ -43,7 +43,7 @@ class LoginController extends ChangeNotifier {
 
         // Registrar token de notificaciones al iniciar sesión
         await NotificationController.initNotifications();
-
+        
         if (!context.mounted) return;
 
         TSnackbar.success(context, '¡Inicio de sesión exitoso!');
