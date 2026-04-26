@@ -8,22 +8,54 @@ import 'shared/widgets/custom_text_field.dart';
 import 'shared/widgets/glass_card.dart';
 import 'shared/widgets/status_badge.dart';
 
-import 'features/home/ui/main_navigation_screen.dart';
+import 'features/auth/views/login/login_view.dart';
 
-void main() {
+
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_stripe/flutter_stripe.dart';
+import 'core/notification/notification_controller.dart';
+import 'core/config/stripe_config.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // Inicializar Firebase
+  try {
+    await Firebase.initializeApp();
+    // Configurar handler en segundo plano
+    FirebaseMessaging.onBackgroundMessage(NotificationController.firebaseMessagingBackgroundHandler);
+    // Inicializar controlador de notificaciones
+    await NotificationController.initNotifications();
+  } catch (e) {
+    debugPrint('⚠️ Firebase no pudo inicializarse (Verificar google-services.json): $e');
+  }
+
+  // Inicializar Stripe
+  try {
+    Stripe.publishableKey = StripeConfig.publishableKey;
+    Stripe.merchantIdentifier = StripeConfig.merchantIdentifier;
+    await Stripe.instance.applySettings();
+  } catch (e) {
+    debugPrint('⚠️ Stripe no pudo inicializarse: $e');
+  }
+
   runApp(const TallerMovilApp());
 }
 
 class TallerMovilApp extends StatelessWidget {
+  static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+  
   const TallerMovilApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Taller Móvil OS',
+      navigatorKey: navigatorKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.darkTheme, // Inyectando nuestro Design System
-      home: const MainNavigationScreen(),
+      home: const LoginView(),
     );
   }
 }

@@ -22,9 +22,9 @@ class PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color bgColor = isDestructive ? AppColors.error : AppColors.primary;
+    Color bgColor = isDestructive ? AppColors.danger : AppColors.primary;
     if (onPressed == null) {
-      bgColor = AppColors.surfaceLight;
+      bgColor = AppColors.neutral100;
     }
 
     return AnimatedContainer(

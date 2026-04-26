@@ -15,6 +15,8 @@ from app.schemas.auth import LoginRequest, TokenResponse, RegisterAdminRequest
 import random
 import string
 import re
+from app.models.bitacora import Bitacora
+from app.core.context import get_ip_context
 
 
 def generate_workshop_code(name: str) -> str:
@@ -92,6 +94,17 @@ async def login(data: LoginRequest, db: AsyncSession) -> TokenResponse:
             subject=user.id,
             extra_claims={"role": "cliente"},
         )
+
+        # Registrar en bitácora
+        db.add(Bitacora(
+            idUsuario=None,
+            accion="LOGIN",
+            tabla="cliente",
+            registro_id=str(user.id),
+            detalles={"correo": user.correo, "rol": "cliente"},
+            ip=get_ip_context()
+        ))
+
         return TokenResponse(access_token=token, rol="cliente", nombre=user.nombre)
 
     elif data.rol == "tecnico":
@@ -102,11 +115,34 @@ async def login(data: LoginRequest, db: AsyncSession) -> TokenResponse:
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Credenciales inválidas",
             )
+        # Buscar nombre del taller
+        workshop_name = None
+        if user.idTaller:
+            w_res = await db.execute(select(Taller.nombre).where(Taller.cod == user.idTaller))
+            workshop_name = w_res.scalar_one_or_none()
+
         token = create_access_token(
             subject=user.id,
             extra_claims={"role": "tecnico", "taller": user.idTaller},
         )
-        return TokenResponse(access_token=token, rol="tecnico", nombre=user.nombre, cod_taller=user.idTaller)
+
+        # Registrar en bitácora
+        db.add(Bitacora(
+            idUsuario=None,  # No tenemos ID de usuario general aquí (es Cliente/Técnico)
+            accion="LOGIN",
+            tabla="tecnico",
+            registro_id=str(user.id),
+            detalles={"correo": user.correo, "rol": "tecnico"},
+            ip=get_ip_context()
+        ))
+
+        return TokenResponse(
+            access_token=token, 
+            rol="tecnico", 
+            nombre=user.nombre, 
+            cod_taller=user.idTaller,
+            nombre_taller=workshop_name
+        )
 
     else:
         raise HTTPException(
@@ -135,4 +171,27 @@ async def login_web(data: LoginRequest, db: AsyncSession) -> TokenResponse:
         subject=user.id,
         extra_claims={"role": "admin", "taller": user.idTaller},
     )
-    return TokenResponse(access_token=token, rol="admin", nombre=user.nombre, cod_taller=user.idTaller)
+
+    # Registrar en bitácora
+    db.add(Bitacora(
+        idUsuario=user.id,
+        accion="LOGIN",
+        tabla="usuario",
+        registro_id=str(user.id),
+        detalles={"correo": user.correo, "rol": "admin"},
+        ip=get_ip_context()
+    ))
+
+    # Buscar nombre del taller
+    workshop_name = None
+    if user.idTaller:
+        w_res = await db.execute(select(Taller.nombre).where(Taller.cod == user.idTaller))
+        workshop_name = w_res.scalar_one_or_none()
+
+    return TokenResponse(
+        access_token=token, 
+        rol="admin", 
+        nombre=user.nombre, 
+        cod_taller=user.idTaller,
+        nombre_taller=workshop_name
+    )

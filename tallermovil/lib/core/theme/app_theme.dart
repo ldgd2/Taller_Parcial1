@@ -3,6 +3,7 @@ import 'app_colors.dart';
 import 'app_text_styles.dart';
 
 class AppTheme {
+  /// Tema Principal Oscuro (Dark Mode)
   static ThemeData get darkTheme {
     return ThemeData(
       useMaterial3: true,
@@ -13,10 +14,10 @@ class AppTheme {
       colorScheme: const ColorScheme.dark(
         primary: AppColors.primary,
         onPrimary: Colors.white,
-        secondary: AppColors.surfaceLight,
+        secondary: AppColors.primary600,
         surface: AppColors.surface,
         onSurface: AppColors.textPrimary,
-        error: AppColors.error,
+        error: AppColors.danger,
         onError: Colors.white,
       ),
 
@@ -25,14 +26,15 @@ class AppTheme {
         displayLarge: AppTextStyles.h1,
         displayMedium: AppTextStyles.h2,
         displaySmall: AppTextStyles.h3,
+        headlineMedium: AppTextStyles.h4,
         bodyLarge: AppTextStyles.bodyLarge,
         bodyMedium: AppTextStyles.bodyMedium,
         bodySmall: AppTextStyles.bodySmall,
-        labelLarge: AppTextStyles.label,
+        labelLarge: AppTextStyles.button,
         labelSmall: AppTextStyles.overline,
       ),
 
-      // AppBar Theme (Sin sombras, diseño flat)
+      // AppBar Theme (Limpio, sin sombras, fondo igual al scaffold)
       appBarTheme: AppBarTheme(
         backgroundColor: AppColors.background,
         elevation: 0,
@@ -42,55 +44,68 @@ class AppTheme {
         iconTheme: const IconThemeData(color: AppColors.textPrimary),
       ),
 
-      // Inputs / Formularios (Con diseño bordes redondeados y estados)
+      // Configuración de TextFields (Aspecto C#: Bordes sutiles oscuros)
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: AppColors.surface,
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-        hintStyle: AppTextStyles.bodyMedium,
-        labelStyle: AppTextStyles.label,
+        hintStyle: AppTextStyles.bodyMedium.copyWith(color: AppColors.textMuted),
+        labelStyle: AppTextStyles.label.copyWith(color: AppColors.textSecondary),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: AppColors.border),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
           borderSide: const BorderSide(color: AppColors.border),
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.primary),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppColors.borderFocus, width: 2),
         ),
         errorBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: AppColors.error),
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppColors.danger),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(8),
+          borderSide: const BorderSide(color: AppColors.danger, width: 2),
         ),
       ),
 
-      // ElevantedButton Global 
+      // Botones Elevados (Primary Action)
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
           elevation: 0,
-          textStyle: AppTextStyles.label,
+          textStyle: AppTextStyles.button,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
           ),
         ),
       ),
 
-      // Outlined Button
+      // Botones Delineados (Secondary Action)
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: AppColors.textPrimary,
           side: const BorderSide(color: AppColors.border),
-          textStyle: AppTextStyles.label,
+          textStyle: AppTextStyles.button,
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(12),
+            borderRadius: BorderRadius.circular(8),
           ),
+        ),
+      ),
+
+      // Botones de Texto (Tertiary Action)
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: AppColors.primary,
+          textStyle: AppTextStyles.button,
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
       ),
       
@@ -100,18 +115,20 @@ class AppTheme {
         elevation: 0,
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(12),
           side: const BorderSide(color: AppColors.border),
         ),
       ),
       
-      // Bottom Navigation Bar
+      // Navegación Inferior
       bottomNavigationBarTheme: const BottomNavigationBarThemeData(
         backgroundColor: AppColors.surface,
         selectedItemColor: AppColors.primary,
         unselectedItemColor: AppColors.textMuted,
         elevation: 8,
         type: BottomNavigationBarType.fixed,
+        selectedLabelStyle: TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+        unselectedLabelStyle: TextStyle(fontWeight: FontWeight.w500, fontSize: 12),
       ),
     );
   }

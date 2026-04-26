@@ -10,10 +10,31 @@ from typing import List
 
 from app.core.database import get_db
 from app.core.dependencies import require_role
-from app.schemas.cliente import ClienteCreate, ClienteOut, VehiculoOut
+from app.schemas.cliente import ClienteCreate, ClienteOut, VehiculoOut, VehiculoCreate, ClienteSimpleCreate
 from app.services import cliente_service
 
 router = APIRouter(prefix="/clientes", tags=["GPS — Clientes (CU03)"])
+
+
+@router.get(
+    "/",
+    response_model=List[ClienteOut],
+    summary="CU03 — Listar todos los clientes",
+)
+async def listar_clientes(db: AsyncSession = Depends(get_db)):
+    """Retorna la lista completa de clientes (Uso para Admin/Tecnico)."""
+    return await cliente_service.obtener_todos_los_clientes(db)
+
+
+@router.post(
+    "/",
+    response_model=ClienteOut,
+    status_code=201,
+    summary="CU03 — Crear cliente (Sin vehículo)",
+)
+async def crear_cliente(data: ClienteSimpleCreate, db: AsyncSession = Depends(get_db)):
+    """Crea una cuenta de cliente sin necesidad de un vehículo inicial."""
+    return await cliente_service.registrar_cliente_solo(data, db)
 
 
 @router.post(

@@ -45,6 +45,7 @@ async def seed():
             Estado(nombre="EN_PROCESO",  descripcion="Técnico en camino o atendiendo"),
             Estado(nombre="ATENDIDO",    descripcion="Servicio completado"),
             Estado(nombre="CANCELADO",   descripcion="Solicitud cancelada"),
+            Estado(nombre="FINALIZADA",  descripcion="Emergencia pagada y cerrada"),
         ]
         for e in estados:
             result = await db.execute(

@@ -18,6 +18,9 @@ import os
 
 from app.core.config import settings
 from app.core.database import engine, Base
+from app.core.audit import register_audit_listeners
+from app.core.context import set_ip_context, set_user_context
+from fastapi import Request
 
 # ─── Importar todos los modelos para que Alembic los detecte ──────
 from app.models import *  # noqa: F401, F403
@@ -29,6 +32,9 @@ from app.api.v1.gestion_comercio import router as gestion_comercio_router
 
 # Catálogos (transversal — especialidades, prioridades, categorías)
 from app.api.v1.catalogos import router as catalogos_router
+
+# ─── Inicializar Auditoría Universal ────────────────────────────
+register_audit_listeners(Base)
 
 app = FastAPI(
     title=settings.APP_NAME,
@@ -65,6 +71,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# ─── Middleware de Contexto (IP y Usuario) ───────────────────────
+@app.middleware("http")
+async def context_middleware(request: Request, call_next):
+    # Capturar IP del cliente
+    ip = request.client.host if request.client else "unknown"
+    set_ip_context(ip)
+    
+    # Reset user context for each request
+    set_user_context(None)
+    
+    response = await call_next(request)
+    return response
 
 # ─── Registrar paquetes ───────────────────────────────────────────
 PREFIX = settings.API_V1_PREFIX

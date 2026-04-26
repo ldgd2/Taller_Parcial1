@@ -67,7 +67,7 @@ async def listar_asignadas(
 async def obtener_emergencia(
     id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: dict = Depends(require_role("admin")),
+    current_user: dict = Depends(require_role("admin", "tecnico", "cliente")),
 ):
     emergencia = await emergencia_service.obtener_emergencia_detalle(id, db)
     if not emergencia:

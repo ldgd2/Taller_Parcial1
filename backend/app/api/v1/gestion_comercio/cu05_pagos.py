@@ -14,11 +14,22 @@ from sqlalchemy import select
 from decimal import Decimal
 import datetime
 
+import stripe
 from app.core.database import get_db
 from app.core.dependencies import require_role
 from app.models.pago import Pago
 from app.models.emergencia import Emergencia
-from app.schemas.pago import PagoCreate, PagoOut
+from app.models.estado import Estado
+from app.models.historial_estado import HistorialEstado
+from app.services import ai_service
+from app.schemas.ai_schemas import SimulacionCostoIA
+from app.core.config import settings
+from app.models.cliente import Cliente
+from app.models.metodo_pago import MetodoPago
+from app.schemas.metodo_pago import MetodoPagoOut, SetupIntentOut
+from app.schemas.pago import PagoStripeCreate, PagoOut, PagoCreate
+
+stripe.api_key = settings.STRIPE_SECRET_KEY
 
 router = APIRouter(prefix="/pagos", tags=["Comercio — Pagos (CU05)"])
 
@@ -27,7 +38,7 @@ router = APIRouter(prefix="/pagos", tags=["Comercio — Pagos (CU05)"])
     "/{emergencia_id}",
     response_model=PagoOut,
     status_code=201,
-    summary="CU05 — Registrar pago de emergencia atendida",
+    summary="CU05 — Registrar pago de emergencia (Admin)",
 )
 async def registrar_pago(
     emergencia_id: int,
@@ -36,15 +47,19 @@ async def registrar_pago(
     db: AsyncSession = Depends(get_db),
 ):
     """
-    CU05: Registra el pago del servicio de emergencia.
+    CU05: Registra el pago del servicio de emergencia (Manual por Admin).
     Calcula automáticamente la comisión del 10% y el monto neto al taller.
-    Solo el admin del taller propietario puede registrar el pago.
     """
     # 1. Verificar que la emergencia existe
     res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
     emergencia = res.scalar_one_or_none()
     if not emergencia:
         raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
+
+    # 1.5 Verificar si ya existe un pago completado
+    pago_existente = await db.execute(select(Pago).where(Pago.emergencia_id == emergencia_id, Pago.estado == "COMPLETADO"))
+    if pago_existente.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Esta emergencia ya ha sido pagada.")
 
     # 2. Verificar que pertenece al taller del admin autenticado
     taller_cod = current.get("taller")
@@ -60,15 +75,240 @@ async def registrar_pago(
     pago = Pago(
         monto=data.monto,
         monto_comision=comision,
+        cliente_id=emergencia.idCliente,
+        emergencia_id=emergencia.id,
+        estado="COMPLETADO",
         fecha_pago=datetime.date.today(),
     )
     db.add(pago)
     await db.flush()
 
-    # 4. Vincular pago a la emergencia
+    # 4. Vincular pago a la emergencia y finalizar
     emergencia.idPago = pago.id
+    
+    # Cambiar estado a FINALIZADA
+    estado_fin_res = await db.execute(select(Estado).where(Estado.nombre == "FINALIZADA"))
+    estado_fin = estado_fin_res.scalar_one_or_none()
+    if estado_fin:
+        emergencia.idEstado = estado_fin.id
+        historial = HistorialEstado(
+            idEmergencia=emergencia.id,
+            idEstado=estado_fin.id
+        )
+        db.add(historial)
+
     await db.commit()
     await db.refresh(pago)
+    return pago
+
+
+# --- STRIPE ENDPOINTS PARA CLIENTES ---
+
+async def _get_or_create_stripe_customer(cliente: Cliente, db: AsyncSession):
+    if cliente.stripe_customer_id:
+        return cliente.stripe_customer_id
+    
+    customer = stripe.Customer.create(
+        email=cliente.correo,
+        name=cliente.nombre,
+        metadata={"cliente_id": cliente.id}
+    )
+    cliente.stripe_customer_id = customer.id
+    await db.flush()
+    return customer.id
+
+@router.post(
+    "/stripe/setup-intent",
+    response_model=SetupIntentOut,
+    summary="Stripe — Crear Setup Intent para registrar tarjeta",
+)
+async def create_setup_intent(
+    current=Depends(require_role("cliente")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Crea un SetupIntent para que el cliente pueda registrar una tarjeta de forma segura."""
+    cliente_res = await db.execute(select(Cliente).where(Cliente.id == current["user_id"]))
+    cliente = cliente_res.scalar_one()
+    
+    customer_id = await _get_or_create_stripe_customer(cliente, db)
+    await db.commit()
+    
+    intent = stripe.SetupIntent.create(
+        customer=customer_id,
+        payment_method_types=["card"],
+    )
+    
+    return {"client_secret": intent.client_secret, "customer_id": customer_id}
+
+@router.post(
+    "/stripe/sync-cards",
+    response_model=list[MetodoPagoOut],
+    summary="Stripe — Sincronizar tarjetas de Stripe a la DB",
+)
+async def sync_cards(
+    current=Depends(require_role("cliente")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Obtiene las tarjetas registradas en Stripe y las sincroniza con nuestra DB."""
+    cliente_res = await db.execute(select(Cliente).where(Cliente.id == current["user_id"]))
+    cliente = cliente_res.scalar_one()
+    
+    if not cliente.stripe_customer_id:
+        return []
+
+    # Listar métodos de pago del cliente en Stripe
+    pms = stripe.PaymentMethod.list(
+        customer=cliente.stripe_customer_id,
+        type="card",
+    )
+    
+    saved_methods = []
+    for pm in pms.data:
+        # Verificar si ya lo tenemos
+        res = await db.execute(
+            select(MetodoPago).where(MetodoPago.stripe_payment_method_id == pm.id)
+        )
+        existing = res.scalar_one_or_none()
+        
+        if not existing:
+            new_pm = MetodoPago(
+                cliente_id=cliente.id,
+                stripe_payment_method_id=pm.id,
+                marca=pm.card.brand,
+                ultimo4=pm.card.last4,
+            )
+            db.add(new_pm)
+            saved_methods.append(new_pm)
+        else:
+            saved_methods.append(existing)
+            
+    await db.commit()
+    return saved_methods
+
+@router.post(
+    "/stripe/confirm-card",
+    response_model=MetodoPagoOut,
+    summary="Stripe — Confirmar y guardar tarjeta en DB",
+)
+async def confirm_card(
+    payment_method_id: str,
+    current=Depends(require_role("cliente")),
+    db: AsyncSession = Depends(get_db),
+):
+    """Guarda el payment_method_id de Stripe en nuestra base de datos local."""
+    # Obtener detalles de la tarjeta desde Stripe
+    pm = stripe.PaymentMethod.retrieve(payment_method_id)
+    
+    nuevo_metodo = MetodoPago(
+        cliente_id=current["user_id"],
+        stripe_payment_method_id=payment_method_id,
+        marca=pm.card.brand,
+        ultimo4=pm.card.last4,
+    )
+    db.add(nuevo_metodo)
+    await db.commit()
+    await db.refresh(nuevo_metodo)
+    return nuevo_metodo
+
+@router.get(
+    "/stripe/metodos",
+    response_model=list[MetodoPagoOut],
+    summary="Stripe — Listar tarjetas guardadas",
+)
+async def listar_metodos_pago(
+    current=Depends(require_role("cliente")),
+    db: AsyncSession = Depends(get_db),
+):
+    res = await db.execute(select(MetodoPago).where(MetodoPago.cliente_id == current["user_id"]))
+    return res.scalars().all()
+
+@router.post(
+    "/stripe/create-intent",
+    response_model=PagoOut,
+    summary="Stripe — Crear Payment Intent para pagar emergencia",
+)
+async def create_payment_intent(
+    data: PagoStripeCreate,
+    current=Depends(require_role("cliente")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Crea un PaymentIntent de Stripe.
+    Calcula el 10% de comisión y lo guarda en la DB.
+    """
+    cliente_res = await db.execute(select(Cliente).where(Cliente.id == current["user_id"]))
+    cliente = cliente_res.scalar_one()
+    
+    emergencia_res = await db.execute(select(Emergencia).where(Emergencia.id == data.emergencia_id))
+    emergencia = emergencia_res.scalar_one_or_none()
+    if not emergencia:
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada")
+
+    # Verificar si ya existe un pago completado
+    pago_existente = await db.execute(
+        select(Pago).where(Pago.emergencia_id == data.emergencia_id, Pago.estado == "COMPLETADO")
+    )
+    if pago_existente.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Esta emergencia ya ha sido pagada.")
+
+    # Calcular comisión 10%
+    comision = data.monto * Decimal("0.10")
+    
+    # Stripe requiere el monto en centavos (int)
+    amount_cents = int(data.monto * 100)
+    
+    customer_id = await _get_or_create_stripe_customer(cliente, db)
+    
+    # Crear el Payment Intent en Stripe
+    intent_params = {
+        "amount": amount_cents,
+        "currency": "usd",
+        "customer": customer_id,
+        "metadata": {
+            "emergencia_id": emergencia.id,
+            "cliente_id": cliente.id,
+            "comision": str(comision)
+        }
+    }
+    
+    if data.metodo_pago_id:
+        intent_params["payment_method"] = data.metodo_pago_id
+        intent_params["off_session"] = True
+        intent_params["confirm"] = True
+    
+    intent = stripe.PaymentIntent.create(**intent_params)
+    
+    # Crear registro de pago en DB (Estado PENDIENTE hasta que se confirme)
+    pago = Pago(
+        monto=data.monto,
+        monto_comision=comision,
+        cliente_id=cliente.id,
+        emergencia_id=emergencia.id,
+        stripe_intent_id=intent.id,
+        metodo_pago_id=data.metodo_pago_id,
+        estado="COMPLETADO" if intent.status == "succeeded" else "PENDIENTE",
+        fecha_pago=datetime.date.today(),
+    )
+    db.add(pago)
+    await db.flush()
+    
+    emergencia.idPago = pago.id
+    
+    # Si el pago ya se completó (succeeded), marcamos como FINALIZADA
+    if intent.status == "succeeded":
+        estado_fin_res = await db.execute(select(Estado).where(Estado.nombre == "FINALIZADA"))
+        estado_fin = estado_fin_res.scalar_one_or_none()
+        if estado_fin:
+            emergencia.idEstado = estado_fin.id
+            historial = HistorialEstado(
+                idEmergencia=emergencia.id,
+                idEstado=estado_fin.id
+            )
+            db.add(historial)
+
+    await db.commit()
+    await db.refresh(pago)
+    
     return pago
 
 
@@ -90,3 +330,34 @@ async def obtener_pago(
 
     pago_res = await db.execute(select(Pago).where(Pago.id == emergencia.idPago))
     return pago_res.scalar_one()
+
+@router.post(
+    "/simular/{emergencia_id}",
+    response_model=SimulacionCostoIA,
+    summary="CU05 — Simular costo de la emergencia con IA",
+)
+async def simular_pago(
+    emergencia_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Usa la IA para estimar el costo del servicio basado en la falla reportada.
+    """
+    res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
+    emergencia = res.scalar_one_or_none()
+    if not emergencia:
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
+
+    # 1.5 Verificar si ya existe un pago completado
+    pago_existente = await db.execute(select(Pago).where(Pago.emergencia_id == emergencia_id, Pago.estado == "COMPLETADO"))
+    if pago_existente.scalar_one_or_none():
+        raise HTTPException(status_code=400, detail="Esta emergencia ya ha sido pagada.")
+
+    vehiculo_str = emergencia.placaVehiculo
+    # Nota: Si el modelo tiene la relación 'vehiculo' cargada, la usamos
+    simulacion = await ai_service.simular_costo_servicio(
+        texto_crudo=emergencia.descripcion + " " + (emergencia.texto_adicional or ""),
+        vehiculo_info=vehiculo_str
+    )
+    
+    return simulacion

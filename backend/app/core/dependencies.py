@@ -8,6 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.security import decode_access_token
+from app.core.context import set_user_context
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
@@ -30,11 +31,12 @@ async def get_current_user(
         if not sub:
             raise credentials_exc
         
-        # Aseguramos que el ID de usuario sea un entero
+
         try:
-            payload["user_id"] = int(sub)
+            user_id = int(sub)
+            payload["user_id"] = user_id
+            set_user_context(user_id)
         except (ValueError, TypeError):
-            # En caso de que el sub no sea numérico (ej: email o UUID antiguo)
             print(f"DEBUG AUTH: sub no numérico: {sub}")
             raise credentials_exc
             

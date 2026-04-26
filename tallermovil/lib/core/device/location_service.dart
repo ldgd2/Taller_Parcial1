@@ -1,4 +1,5 @@
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class LocationService {
   /// Solicita permisos de ubicación al usuario y obtiene las coordenadas actuales.
@@ -31,5 +32,28 @@ class LocationService {
           accuracy: LocationAccuracy.bestForNavigation,
         ),
     );
+  }
+
+  /// Convierte coordenadas Lat/Lng en una dirección legible por humanos (Reverse Geocoding)
+  static Future<String> getAddressFromLatLng(double lat, double lng) async {
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(lat, lng);
+      
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+        
+        // Construimos una dirección amigable
+        // Ejemplo: Calle Bolivar 123, Ciudad, País
+        final List<String> parts = [];
+        if (place.street != null && place.street!.isNotEmpty) parts.add(place.street!);
+        if (place.locality != null && place.locality!.isNotEmpty) parts.add(place.locality!);
+        if (place.country != null && place.country!.isNotEmpty) parts.add(place.country!);
+        
+        return parts.join(', ');
+      }
+      return 'Dirección no encontrada';
+    } catch (e) {
+      return 'Error al obtener dirección: $e';
+    }
   }
 }

@@ -1,82 +1,95 @@
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
-import '../../../core/theme/app_text_styles.dart';
-import '../../../shared/widgets/glass_card.dart';
-import '../../../shared/widgets/status_badge.dart';
+import '../../../shared/components/cards/t_card.dart';
+import '../../../shared/components/feedback/t_badge.dart';
+import '../../../shared/components/layout/t_spacing.dart';
+import '../../../shared/components/typography/t_text.dart';
+import '../../../shared/components/loaders/t_loader.dart';
+import 'home_controller.dart';
 
-class HomeScreen extends StatelessWidget {
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  late final HomeController controller;
+
+  @override
+  void initState() {
+    super.initState();
+    controller = HomeController();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('FieldWork Central'),
-        actions: [
-          IconButton(icon: const Icon(Icons.notifications_outlined), onPressed: () {}),
-        ],
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('¡Hola de nuevo!', style: AppTextStyles.h1),
-            const SizedBox(height: 8),
-            Text('Este es el resumen de tu cuenta y vehículos.', style: AppTextStyles.bodyMedium),
-            const SizedBox(height: 32),
-            
-            // Banner rápido
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: AppColors.primaryMuted.withAlpha(100),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: AppColors.primary),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.shield_outlined, color: AppColors.primary, size: 40),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Protección Activa', style: AppTextStyles.h3),
-                        Text('Vehículos listos para asistencia S.O.S', style: AppTextStyles.bodyMedium),
-                      ],
-                    ),
-                  )
-                ],
-              ),
-            ),
-            
-            const SizedBox(height: 32),
-            Text('Emergencias Recientes', style: AppTextStyles.h2),
-            const SizedBox(height: 16),
-            
-            GlassCard(
-              onTap: () {},
+      body: AnimatedBuilder(
+        animation: controller,
+        builder: (context, child) {
+          if (controller.isLoading) {
+            return const Center(child: TLoader());
+          }
+
+          return RefreshIndicator(
+            onRefresh: controller.loadData,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(24.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Audi Q5 (ABC-123)', style: AppTextStyles.h3),
-                      const StatusBadge(text: 'En Taller', status: BadgeStatus.info),
-                    ],
+                  TText.h1('¡Hola de nuevo!'),
+                  TSpacing.verticalSmall(),
+                  TText.body('Este es el resumen de tu cuenta y vehículos.'),
+                  TSpacing.verticalLarge(),
+                  
+                  TText.h2('Mis Vehículos'),
+                  TSpacing.verticalMedium(),
+                  
+                  if (controller.vehicles.isEmpty)
+                    TCard(
+                      child: Center(
+                        child: TText.body('No tienes vehículos registrados.'),
+                      ),
+                    )
+                  else
+                    ...controller.vehicles.map((v) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12.0),
+                      child: TCard(
+                        onTap: () {},
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                TText.h3('${v['marca']} ${v['modelo']}'),
+                                TBadge.success(v['placa']),
+                              ],
+                            ),
+                            TSpacing.verticalSmall(),
+                            TText.body('Año: ${v['anio']}'),
+                          ],
+                        ),
+                      ),
+                    )),
+                  
+                  TSpacing.verticalLarge(),
+                  TText.h2('Emergencias Recientes'),
+                  TSpacing.verticalMedium(),
+                  
+                  TCard(
+                    child: TText.body('No hay emergencias recientes.'),
                   ),
-                  const SizedBox(height: 8),
-                  Text('Fallo térmico reportado el 15/Oct. Asignado a Taller Los Pinos.', style: AppTextStyles.bodyMedium),
+                  
+                  TSpacing(height: 100),
                 ],
               ),
             ),
-            
-            // Espacio al final para que no tape el FAB
-            const SizedBox(height: 100),
-          ],
-        ),
+          );
+        },
       ),
     );
   }

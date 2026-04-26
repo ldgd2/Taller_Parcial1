@@ -5,8 +5,9 @@ class ApiClient {
   final Dio dio;
   final LocalStorage localStorage;
 
-  // Por defecto apuntamos al localhost del emulador Android hacia el backend de FastAPI
-  static const String baseUrl = 'http://10.0.2.2:8000/api/v1';
+  // URL del servidor local donde corre el backend de FastAPI
+  static const String serverUrl = 'http://192.168.100.244:8000';
+  static const String baseUrl = '$serverUrl/api/v1';
 
   ApiClient({required this.localStorage}) : dio = Dio(BaseOptions(baseUrl: baseUrl)) {
     // Interceptor para inyectar automáticamente el token JWT en cada llamada

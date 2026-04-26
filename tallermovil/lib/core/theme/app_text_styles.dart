@@ -2,65 +2,79 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
+/// Tipografía Global alineada con la Web (Inter font)
 class AppTextStyles {
-  // Configuración base de la fuente principal (Inter)
-  static final TextStyle base = GoogleFonts.inter(
-    color: AppColors.textPrimary,
-  );
+  // Configuración base de la fuente
+  static TextStyle get _baseStyle => GoogleFonts.inter(
+        color: AppColors.textPrimary,
+      );
 
-  // Configuración para familia monospace (Space Mono/Roboto Mono)
-  static final TextStyle mono = GoogleFonts.spaceMono(
-    color: AppColors.primary,
-  );
+  // --- Encabezados (Títulos) ---
+  static TextStyle get h1 => _baseStyle.copyWith(
+        fontSize: 36, // --t-size-4xl
+        fontWeight: FontWeight.w700,
+        height: 1.25, // --t-line-tight
+        letterSpacing: -0.5,
+      );
 
-  // Títulos
-  static final TextStyle h1 = base.copyWith(
-    fontSize: 28,
-    fontWeight: FontWeight.bold,
-    letterSpacing: -0.5,
-  );
+  static TextStyle get h2 => _baseStyle.copyWith(
+        fontSize: 30, // --t-size-3xl
+        fontWeight: FontWeight.w700,
+        height: 1.25,
+        letterSpacing: -0.5,
+      );
 
-  static final TextStyle h2 = base.copyWith(
-    fontSize: 24,
-    fontWeight: FontWeight.w700,
-    letterSpacing: -0.5,
-  );
+  static TextStyle get h3 => _baseStyle.copyWith(
+        fontSize: 24, // --t-size-2xl
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+      );
 
-  static final TextStyle h3 = base.copyWith(
-    fontSize: 20,
-    fontWeight: FontWeight.w600,
-  );
+  static TextStyle get h4 => _baseStyle.copyWith(
+        fontSize: 20, // --t-size-xl
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+      );
 
-  // Cuerpos de texto
-  static final TextStyle bodyLarge = base.copyWith(
-    fontSize: 16,
-    fontWeight: FontWeight.normal,
-  );
+  // --- Cuerpo de Texto (Body) ---
+  static TextStyle get bodyLarge => _baseStyle.copyWith(
+        fontSize: 18, // --t-size-lg
+        fontWeight: FontWeight.w400,
+        height: 1.5, // --t-line-base
+      );
 
-  static final TextStyle bodyMedium = base.copyWith(
-    fontSize: 14,
-    fontWeight: FontWeight.normal,
-    color: AppColors.textSecondary,
-  );
+  static TextStyle get bodyMedium => _baseStyle.copyWith(
+        fontSize: 16, // --t-size-base
+        fontWeight: FontWeight.w400,
+        height: 1.5,
+      );
 
-  static final TextStyle bodySmall = base.copyWith(
-    fontSize: 12,
-    fontWeight: FontWeight.normal,
-    color: AppColors.textMuted,
-  );
+  static TextStyle get bodySmall => _baseStyle.copyWith(
+        fontSize: 14, // --t-size-sm
+        fontWeight: FontWeight.w400,
+        height: 1.5,
+        color: AppColors.textSecondary,
+      );
 
-  // Etiquetas, Botones y Badges
-  static final TextStyle label = base.copyWith(
-    fontSize: 14,
-    fontWeight: FontWeight.w600,
-    color: AppColors.textPrimary,
-  );
+  // --- Elementos de Interfaz (Botones, Labels, etc) ---
+  static TextStyle get label => _baseStyle.copyWith(
+        fontSize: 14, // --t-size-sm
+        fontWeight: FontWeight.w500,
+        height: 1.25,
+      );
 
-  static final TextStyle overline = base.copyWith(
-    fontSize: 10,
-    fontWeight: FontWeight.w700,
-    letterSpacing: 1.0,
-    color: AppColors.textMuted,
-    // equivalente a uppercase en web se suele aplicar en el Text widget
-  );
+  static TextStyle get button => _baseStyle.copyWith(
+        fontSize: 16, // --t-size-base
+        fontWeight: FontWeight.w600,
+        height: 1.25,
+        letterSpacing: 0.2,
+      );
+
+  static TextStyle get overline => _baseStyle.copyWith(
+        fontSize: 12, // --t-size-xs
+        fontWeight: FontWeight.w600,
+        letterSpacing: 1.0,
+        color: AppColors.textMuted,
+        height: 1.5,
+      );
 }

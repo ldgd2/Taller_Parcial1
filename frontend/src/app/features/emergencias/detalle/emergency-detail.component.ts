@@ -5,6 +5,7 @@ import { LucideAngularModule } from 'lucide-angular';
 import { ApiService } from '../../../core/api/api.service';
 import { toast } from 'ngx-sonner';
 import { FormsModule } from '@angular/forms';
+import { environment } from '../../../../environments/environment';
 import * as L from 'leaflet';
 
 @Component({
@@ -37,14 +38,24 @@ import * as L from 'leaflet';
                    class="border border-zinc-700 text-zinc-300 hover:text-primary hover:border-primary px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all">
              Editar Ficha CU10
            </button>
+           <button *ngIf="emergency?.idTaller === currentWorkshop && (emergency?.estado_actual === 'ASIGNADO' || emergency?.estado_actual === 'EN_PROCESO')"
+                   (click)="showPagoModal = true"
+                   class="bg-emerald-600 text-white px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all hover:bg-emerald-500 shadow-lg">
+             Finalizar Trabajo
+           </button>
            <button *ngIf="emergency?.estado_actual === 'ATENDIDO' && !pagoExistente"
                    (click)="showPagoModal = true"
                    class="border border-emerald-700 text-emerald-400 hover:bg-emerald-900/20 px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all">
              Registrar Pago CU05
            </button>
-           <div *ngIf="pagoExistente" class="flex items-center gap-2 px-6 py-3 bg-emerald-900/20 border border-emerald-700">
-             <div class="w-1.5 h-1.5 bg-emerald-500 rounded-full"></div>
-             <span class="font-mono text-[9px] uppercase text-emerald-400 tracking-widest">PAGO: $ {{ pagoExistente.monto }}</span>
+           <div *ngIf="pagoExistente" class="flex flex-col items-end gap-1 px-6 py-3 bg-emerald-900/20 border border-emerald-700 animate-in fade-in duration-300">
+             <div class="flex items-center gap-2">
+                <div class="w-1.5 h-1.5 rounded-full" [ngClass]="pagoExistente.estado === 'COMPLETADO' ? 'bg-emerald-500 animate-pulse shadow-[0_0_8px_#10b981]' : 'bg-yellow-500'"></div>
+                <span class="font-mono text-[9px] uppercase text-emerald-400 tracking-widest">PAGO: $ {{ pagoExistente.monto }}</span>
+             </div>
+             <span class="text-[7px] uppercase font-bold tracking-widest" [ngClass]="pagoExistente.estado === 'COMPLETADO' ? 'text-emerald-500' : 'text-yellow-500/70'">
+               {{ pagoExistente.estado === 'COMPLETADO' ? 'PAGO CONFIRMADO' : 'ESPERANDO PAGO...' }}
+             </span>
            </div>
            <button *ngIf="emergency?.estado_actual === 'PENDIENTE' || emergency?.estado_actual === 'INICIADA'"
                    (click)="openAssignModal()"
@@ -206,7 +217,7 @@ import * as L from 'leaflet';
                  <h3 class="text-[10px] font-bold uppercase tracking-[.4em] text-zinc-600">Telemetría Visual</h3>
                  <div class="grid grid-cols-2 gap-px bg-zinc-900 border border-zinc-900">
                     <div *ngFor="let img of emergency.evidencias" class="aspect-square bg-[#050505] overflow-hidden group">
-                       <img [src]="img.direccion" class="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-all duration-500 group-hover:scale-110">
+                       <img [src]="getImageUrl(img.direccion)" class="w-full h-full object-cover opacity-50 group-hover:opacity-100 transition-all duration-500 group-hover:scale-110">
                     </div>
                  </div>
               </section>
@@ -510,6 +521,14 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
     return ['SIN_DATA_DETECTED'];
   }
 
+  getImageUrl(path: string): string {
+    if (!path) return '';
+    if (path.startsWith('http')) return path;
+    // El backend sirve estáticos en /uploads/
+    const serverUrl = environment.apiUrl.replace('/api/v1', '');
+    return `${serverUrl}/uploads/${path}`;
+  }
+
   openAssignModal() {
     if (!this.emergency.is_locked) {
       this.api.post(`/gestion-emergencia/${this.emergency.id}/analizar`, {}).subscribe({
@@ -592,7 +611,9 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
   cargarPago() {
     this.api.get<any>(`/pagos/${this.emergency.id}`).subscribe({
       next: (res) => { this.pagoExistente = res; },
-      error: () => { this.pagoExistente = null; }
+      error: () => { 
+        this.pagoExistente = null; 
+      }
     });
   }
 
@@ -601,14 +622,17 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
       toast.error('Ingresa un monto válido');
       return;
     }
-    this.api.post(`/pagos/${this.emergency.id}`, { monto: this.pagoMonto }).subscribe({
+    
+    // Llamamos al nuevo endpoint de finalización
+    this.api.post(`/talleres/solicitudes/${this.emergency.id}/finalizar`, { 
+      monto_total: this.pagoMonto 
+    }).subscribe({
       next: (res) => {
-        toast.success(`Pago de $${this.pagoMonto} registrado correctamente`);
-        this.pagoExistente = res;
-        this.pagoMonto = null;
+        toast.success(`Servicio finalizado. Notificación de pago enviada al cliente.`);
         this.showPagoModal = false;
+        this.loadDetail();
       },
-      error: (err) => toast.error('Error al registrar pago', { description: err.error?.detail })
+      error: (err) => toast.error('Error al finalizar servicio', { description: err.error?.detail })
     });
   }
 }

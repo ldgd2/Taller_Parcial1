@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -11,6 +11,8 @@ class Cliente(Base):
     correo = Column(String(255), nullable=False, unique=True, index=True)
     contrasena = Column("contraseña", String(255), nullable=False)
     estado = Column(String(20), nullable=False, server_default="ACTIVO", default="ACTIVO")
+    fcm_token = Column(String(512), nullable=True)
+    stripe_customer_id = Column(String(255), nullable=True)
 
     # Relaciones
     vehiculos = relationship("Vehiculo", back_populates="cliente")

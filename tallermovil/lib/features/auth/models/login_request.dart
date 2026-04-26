@@ -1,15 +1,19 @@
 class LoginRequest {
-  final String username;
-  final String password;
+  final String correo;
+  final String contrasena;
+  final String rol;
 
-  LoginRequest({required this.username, required this.password});
+  LoginRequest({
+    required this.correo,
+    required this.contrasena,
+    this.rol = 'cliente', // Por defecto cliente para la app móvil
+  });
 
-  /// Convierte el objeto a JSON para el envío. 
-  /// Usamos la convención del backend (username/password de OAuth2 o custom body).
   Map<String, dynamic> toJson() {
     return {
-      'username': username,
-      'password': password,
+      'correo': correo,
+      'contrasena': contrasena,
+      'rol': rol,
     };
   }
 }

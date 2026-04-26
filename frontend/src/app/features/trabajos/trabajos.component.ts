@@ -90,14 +90,14 @@ export class TrabajosComponent implements OnInit {
 
   get filteredItems() {
     return this.items.filter(emg => {
-        const isDone = ['ATENDIDO', 'CANCELADO'].includes(emg.estado_actual);
+        const isDone = ['ATENDIDO', 'CANCELADO', 'FINALIZADA'].includes(emg.estado_actual);
         return this.tab === 'active' ? !isDone : isDone;
     });
   }
 
   mapToCardFormat(emg: any) {
     const vehiculo = emg.vehiculo || {};
-    const isDone = ['ATENDIDO', 'CANCELADO'].includes(emg.estado_actual);
+    const isDone = ['ATENDIDO', 'CANCELADO', 'FINALIZADA'].includes(emg.estado_actual);
     
     return {
       id: `EMG-${emg.id}`,

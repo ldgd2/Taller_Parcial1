@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "556986113836",
+    "project_id": "universidadtest-cccae",
+    "storage_bucket": "universidadtest-cccae.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:556986113836:android:cbec45036b77cd3eb0d689",
+        "android_client_info": {
+          "package_name": "com.example.tallermovil"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAzO-2yA4VI_S6-EqSdjWXzuKX0DxT03ss"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

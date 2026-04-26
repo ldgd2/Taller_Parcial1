@@ -2,6 +2,7 @@ import os
 import subprocess
 import platform
 import shutil
+import sys
 
 HAS_RICH = False
 try:

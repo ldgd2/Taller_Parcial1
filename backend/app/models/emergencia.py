@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Text, Date, Time, ForeignKey, func, Float, DateTime
+from sqlalchemy import Column, Integer, String, Text, Date, Time, ForeignKey, func, Float, DateTime, Boolean
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
@@ -12,6 +12,7 @@ class Emergencia(Base):
     direccion = Column(String(500), nullable=False)
     latitud = Column(Float, nullable=True)
     longitud = Column(Float, nullable=True)
+    es_valida = Column(Boolean, default=True, server_default="true")
     fecha = Column(Date, nullable=False, server_default=func.current_date())
     hora = Column(Time, nullable=False)
 
@@ -37,7 +38,7 @@ class Emergencia(Base):
     categoria = relationship("CategoriaProblema")
     cliente = relationship("Cliente", back_populates="emergencias")
     vehiculo = relationship("Vehiculo", back_populates="emergencias")
-    pago = relationship("Pago")
+    pago = relationship("Pago", foreign_keys=[idPago])
     estado = relationship("Estado")
     evidencias = relationship("Evidencia", back_populates="emergencia")
     historial = relationship("HistorialEstado", back_populates="emergencia")

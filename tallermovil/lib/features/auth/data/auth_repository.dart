@@ -1,5 +1,6 @@
 import '../../../core/storage/local_storage.dart';
 import '../models/login_request.dart';
+import '../models/register_request.dart';
 import 'auth_api_service.dart';
 
 class AuthRepository {
@@ -14,7 +15,7 @@ class AuthRepository {
   /// Orquesta el flujo de negocio: llama a la API y persiste si fue exitoso
   Future<void> loginAndSaveSession(String username, String password) async {
     // 1. Crear el objeto DTO
-    final request = LoginRequest(username: username, password: password);
+    final request = LoginRequest(correo: username, contrasena: password);
     
     // 2. Hacer la llamada de Red
     final authResponse = await apiService.login(request);
@@ -29,6 +30,11 @@ class AuthRepository {
         rol: authResponse.rol,
       );
     }
+  }
+
+  /// Registra un nuevo cliente y su vehículo
+  Future<void> register(RegisterRequest request) async {
+    await apiService.register(request);
   }
 
   /// Limpia la sesión localmente y notifica al backend

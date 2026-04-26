@@ -33,7 +33,7 @@ def panel_print(rich_content, plain_content, border="blue", title=""):
 
 def do_status(rich_msg, plain_msg, action_lambda):
     if HAS_RICH:
-        with console.status(f"[cyan]{rich_msg}[/cyan]", spinner="status"):
+        with console.status(f"[cyan]{rich_msg}[/cyan]", spinner="dots"):
             action_lambda()
     else:
         print(plain_msg)
@@ -47,6 +47,7 @@ def add_subparser(parser):
     subparsers.add_parser("frontend", help="Ejecuta ng test")
     subparsers.add_parser("ia", help="Ejecuta el paquete de test de Inteligencia Artificial (Whisper y OpenRouter)")
     subparsers.add_parser("diag_ai", help="Diagnóstico profundo de cuotas y créditos de OpenRouter")
+    subparsers.add_parser("notifications", help="Test de Notificaciones Push (Broadcast/Personalizadas)")
 
 def execute(args):
     target = args.target
@@ -110,11 +111,81 @@ def execute(args):
         subprocess.run([sys_exe, os.path.join(test_ia_dir, "test_openrouter.py")])
 
     elif target == "diag_ai":
-        cprint("\n[bold magenta]Consultando Estado de Créditos en OpenRouter...[/bold magenta]", "\nConsultando Créditos de IA...")
-        sys_exe = sys.executable
-        script_dir = os.path.dirname(os.path.abspath(__file__))
         diag_script = os.path.join(script_dir, "test_ia", "diag_openrouter.py")
         subprocess.run([sys_exe, diag_script])
+
+    elif target == "notifications":
+        import questionary
+        tipo = questionary.select(
+            "Tipo de Notificación a enviar:",
+            choices=["Broadcast (A todos)", "Personalizada (A un Usuario)", "Directa (Por Token)", "Cancelar"]
+        ).ask()
+
+        if tipo == "Cancelar": return
+
+        # 1. Si es directa, pedir el token PRIMERO como pidió el usuario
+        target_token = None
+        target_user_id = None
+        if tipo == "Directa (Por Token)":
+            target_token = questionary.text("Token del dispositivo destino:").ask()
+            if not target_token: return
+        elif tipo == "Personalizada (A un Usuario)":
+            target_user_id = questionary.text("ID del Usuario destino:").ask()
+            if not target_user_id: return
+
+        # 2. Elegir un "Template" o estilo
+        estilo = questionary.select(
+            "Estilo/Tipo de Notificación:",
+            choices=["Estándar", "Alerta Crítica (Roja)", "Actualización de Estado", "Mensaje de Soporte"]
+        ).ask()
+
+        # Configurar según estilo
+        default_title = "TEST NAVAJA SUIZA"
+        default_body = "Esta es una prueba desde la estación de control."
+        extra_data = {"type": "test"}
+
+        if estilo == "Alerta Crítica (Roja)":
+            default_title = "⚠️ ALERTA DE EMERGENCIA"
+            default_body = "Se requiere atención inmediata en su ubicación."
+            extra_data = {"priority": "high", "color": "red", "type": "emergency"}
+        elif estilo == "Actualización de Estado":
+            default_title = "✅ Estado Actualizado"
+            default_body = "Su vehículo ha sido asignado a un técnico."
+            extra_data = {"status": "assigned", "type": "update"}
+        elif estilo == "Mensaje de Soporte":
+            default_title = "💬 Nuevo Mensaje"
+            default_body = "El taller te ha enviado un mensaje."
+            extra_data = {"channel": "chat", "type": "message"}
+
+        titulo = questionary.text("Título de la notificación:", default=default_title).ask()
+        cuerpo = questionary.text("Cuerpo de la notificación:", default=default_body).ask()
+
+        def send_notification():
+            try:
+                base_url = "http://localhost:8000/api/v1/notificaciones"
+                
+                if tipo == "Broadcast (A todos)":
+                    url = f"{base_url}/test-broadcast?titulo={urllib.parse.quote(titulo)}&cuerpo={urllib.parse.quote(cuerpo)}"
+                    data_json = json.dumps(extra_data).encode()
+                    req = urllib.request.Request(url, data=data_json, method="POST", headers={"Content-Type": "application/json"})
+                elif tipo == "Personalizada (A un Usuario)":
+                    url = f"{base_url}/test-personalizada"
+                    # Nota: El schema CustomNotificationRequest no tiene 'data' aún, lo dejamos simple o lo agregamos
+                    payload = {"user_id": int(target_user_id), "titulo": titulo, "cuerpo": cuerpo}
+                    data_json = json.dumps(payload).encode()
+                    req = urllib.request.Request(url, data=data_json, method="POST", headers={"Content-Type": "application/json"})
+                else: # Directa (Por Token)
+                    url = f"{base_url}/test-token?token={urllib.parse.quote(target_token)}&titulo={urllib.parse.quote(titulo)}&cuerpo={urllib.parse.quote(cuerpo)}"
+                    data_json = json.dumps(extra_data).encode()
+                    req = urllib.request.Request(url, data=data_json, method="POST", headers={"Content-Type": "application/json"})
+
+                with urllib.request.urlopen(req) as response:
+                    res_data = json.loads(response.read().decode())
+                    panel_print(f"[bold green]Éxito:[/bold green] {res_data.get('message')}", "Notificación enviada correctamente", "green", "Resultado Push")
+            except Exception as e:
+                panel_print(f"[bold red]Error al enviar:[/bold red] {str(e)}", f"Error: {e}", "red", "Push Failed")
+
+        do_status("Enviando notificación push...", "Enviando notificación push...", send_notification)
 
 def interactive_menu():
     """Interfaz interactiva delegada para Tests."""
@@ -122,6 +193,7 @@ def interactive_menu():
     choices = [
         "IA (Whisper/OpenRouter)", 
         "Diagnóstico de Créditos AI",
+        "Notificaciones Push (Test)",
         "Ping/Health Backend", 
         "Frontend (Unit Tests)", 
         "Volver"
@@ -133,6 +205,7 @@ def interactive_menu():
         
     if "IA (Whisper" in opt: target = "ia"
     elif "Diagnóstico" in opt: target = "diag_ai"
+    elif "Notificaciones" in opt: target = "notifications"
     elif "Ping" in opt: target = "ping"
     else: target = "frontend"
     

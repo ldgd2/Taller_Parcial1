@@ -25,7 +25,7 @@ try:
 except ImportError:
     pass
 
-from scripts import cmd_setup, cmd_db, cmd_run, cmd_deploy, cmd_test, cmd_config, cmd_network
+from scripts import cmd_setup, cmd_db, cmd_run, cmd_deploy, cmd_test, cmd_config, cmd_network, cmd_dashboard
 
 def print_banner():
     banner = """
@@ -107,6 +107,7 @@ def interactive_menu():
                 "Ejecución de Servidores",
                 "Pruebas y QA (IA/Whisper)",
                 "Instalación de Dependencias",
+                "Estadísticas y Ganancias (Dashboard Admin)",
                 "Salir"
             ],
             style=questionary.Style([
@@ -135,6 +136,8 @@ def interactive_menu():
             cmd_test.interactive_menu()
         elif "Instalación" in category:
             cmd_setup.interactive_menu()
+        elif "Estadísticas" in category:
+            cmd_dashboard.interactive_menu()
 
 def main():
     if len(sys.argv) > 1 and sys.argv[1] not in ["--help", "-h"]:
@@ -147,6 +150,7 @@ def main():
         cmd_run.add_subparser(subparsers.add_parser("run"))
         cmd_deploy.add_subparser(subparsers.add_parser("deploy"))
         cmd_test.add_subparser(subparsers.add_parser("test"))
+        cmd_dashboard.add_subparser(subparsers.add_parser("dashboard"))
         
         args, _ = parser.parse_known_args()
         if args.category:

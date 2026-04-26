@@ -137,12 +137,14 @@ export class LoginComponent {
       next: (res) => {
         this.loading = false;
         // Guardar token
+        // Guardar token y sesión
         localStorage.setItem('access_token', res.access_token);
         localStorage.setItem('rol', res.rol);
-        localStorage.setItem('nombre', res.nombre);
+        localStorage.setItem('user_name', res.nombre);
         localStorage.setItem('cod_taller', res.cod_taller || '');
+        localStorage.setItem('nombre_taller', res.nombre_taller || 'Taller OS');
         
-        this.router.navigate(['/dashboard']);
+        this.router.navigate(['/app/dashboard']);
       },
       error: (err) => {
         this.loading = false;

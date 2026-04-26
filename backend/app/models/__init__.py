@@ -17,3 +17,6 @@ from app.models.historial_estado import HistorialEstado     # noqa: F401
 from app.models.evidencia import Evidencia                  # noqa: F401
 from app.models.usuario import Usuario                      # noqa: F401
 from app.models.asignacion_tecnico_emergencia import AsignacionTecnicoEmergencia # noqa: F401
+from app.models.fcm_token import FCMToken              # noqa: F401
+from app.models.metodo_pago import MetodoPago          # noqa: F401
+from app.models.bitacora import Bitacora             # noqa: F401

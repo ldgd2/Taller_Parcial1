@@ -102,8 +102,8 @@ import { toast } from 'ngx-sonner';
 export class MainLayoutComponent implements OnInit {
   isCollapsed = false;
   operadorNombre = localStorage.getItem('user_name') || 'Operador';
-  operadorTaller = localStorage.getItem('cod_taller') || 'Taller';
-  operadorInicial = (localStorage.getItem('user_name') || 'OP').substring(0, 2).toUpperCase();
+  operadorTaller = localStorage.getItem('nombre_taller') || 'Taller OS';
+  operadorInicial = (this.operadorNombre).substring(0, 2).toUpperCase();
   
   navItems = [
     { label: 'Tablero', icon: 'layout-dashboard', path: '/app/dashboard' },

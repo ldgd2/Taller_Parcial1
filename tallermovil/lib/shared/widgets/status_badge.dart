@@ -29,15 +29,15 @@ class StatusBadge extends StatelessWidget {
         textColor = AppColors.warning;
         break;
       case BadgeStatus.error:
-        bgColor = AppColors.errorBg.withAlpha(128);
-        textColor = AppColors.error;
+        bgColor = AppColors.dangerBg.withAlpha(128);
+        textColor = AppColors.danger;
         break;
       case BadgeStatus.info:
         bgColor = AppColors.infoBg.withAlpha(128);
         textColor = AppColors.info;
         break;
       case BadgeStatus.neutral:
-        bgColor = AppColors.surfaceLight;
+        bgColor = AppColors.neutral100;
         textColor = AppColors.textSecondary;
         break;
     }

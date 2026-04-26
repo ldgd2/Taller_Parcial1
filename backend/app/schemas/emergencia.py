@@ -3,6 +3,7 @@ from typing import Optional, List
 from datetime import date, time, datetime
 from app.schemas.tecnico import TecnicoOut
 from app.schemas.vehiculo import VehiculoOut
+from app.schemas.pago import PagoOut
 
 # ─── Resumen IA ───────────────────────────────────────────────────
 
@@ -25,6 +26,7 @@ class EmergenciaCreate(BaseModel):
     hora: time
     placaVehiculo: str
     audio_url: Optional[str] = None
+    evidencias_urls: List[str] = []
 
 # ─── Respuesta emergencia ─────────────────────────────────────────
 
@@ -50,6 +52,7 @@ class EmergenciaOut(BaseModel):
     evidencias: List['EvidenciaOut'] = []
     tecnicos_asignados: List[TecnicoOut] = []
     vehiculo: Optional[VehiculoOut] = None
+    pago: Optional[PagoOut] = None
 
     model_config = {"from_attributes": True}
 
@@ -59,6 +62,10 @@ class EmergenciaOut(BaseModel):
 class ActualizarEstadoRequest(BaseModel):
     idEstado: int
     comentario: Optional[str] = None
+
+class FinalizarEmergenciaRequest(BaseModel):
+    monto_total: float
+    comentarios_finales: Optional[str] = None
 
 
 # ─── Evidencia ────────────────────────────────────────────────────

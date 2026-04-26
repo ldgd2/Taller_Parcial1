@@ -34,6 +34,10 @@ class Settings(BaseSettings):
     WHISPER_MODEL_SIZE: str = "tiny"
     WHISPER_DEVICE: str = "cpu"
     WHISPER_COMPUTE_TYPE: str = "int8"
+    
+    # Stripe
+    STRIPE_SECRET_KEY: str = ""
+    STRIPE_WEBHOOK_SECRET: str = ""
 
     # Configuración de Pydantic v2
     # Buscamos el .env en la raiz del proyecto (4 niveles arriba)

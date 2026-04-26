@@ -15,6 +15,7 @@ class TokenResponse(BaseModel):
     rol: str
     nombre: str
     cod_taller: Optional[str] = None
+    nombre_taller: Optional[str] = None
 
 
 # ─── Registro de Administrador ──────────────────────────────

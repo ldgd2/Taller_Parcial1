@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../emergencies/ui/report_emergency_screen.dart';
+import '../../emergencies/views/history/emergency_history_view.dart';
+import '../../emergencies/views/report_emergency/report_emergency_view.dart';
 import '../../vehicles/ui/vehicle_settings_screen.dart';
+import '../../settings/ui/settings_screen.dart';
 import 'home_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -15,17 +17,33 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 
   final List<Widget> _screens = [
     const HomeScreen(),
-    const Center(child: Text("Historial de Averías", style: TextStyle(color: Colors.white))),
     const VehicleSettingsScreen(),
+    const EmergencyHistoryView(),
+    const SettingsScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: Image.asset('assets/logo_small.png', height: 30, errorBuilder: (_, __, ___) => const Text('Taller OS')),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.notifications_outlined),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings_outlined),
+            onPressed: () {
+              setState(() => _currentIndex = 3); // Ir a Ajustes
+            },
+          ),
+        ],
+      ),
       body: _screens[_currentIndex],
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportEmergencyScreen()));
+          Navigator.push(context, MaterialPageRoute(builder: (_) => const ReportEmergencyView()));
         },
         backgroundColor: Colors.redAccent,
         elevation: 8,
@@ -36,6 +54,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
         onTap: (index) => setState(() => _currentIndex = index),
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(
             icon: Icon(Icons.home_outlined),
@@ -43,13 +62,18 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
             label: 'Inicio',
           ),
           BottomNavigationBarItem(
+            icon: Icon(Icons.directions_car_outlined),
+            activeIcon: Icon(Icons.directions_car),
+            label: 'Vehículos',
+          ),
+          BottomNavigationBarItem(
             icon: Icon(Icons.history_outlined),
             activeIcon: Icon(Icons.history),
             label: 'Actividad',
           ),
           BottomNavigationBarItem(
-            icon: Icon(Icons.settings_outlined),
-            activeIcon: Icon(Icons.settings),
+            icon: Icon(Icons.person_outline),
+            activeIcon: Icon(Icons.person),
             label: 'Ajustes',
           ),
         ],

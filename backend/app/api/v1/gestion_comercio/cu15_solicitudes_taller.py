@@ -26,7 +26,7 @@ router = APIRouter(prefix="/talleres", tags=["Comercio — Solicitudes Taller (C
 )
 async def solicitudes_taller(
     cod: str,
-    current=Depends(require_role("tecnico")),
+    current=Depends(require_role("tecnico", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -43,7 +43,7 @@ async def solicitudes_taller(
 async def actualizar_estado(
     emergencia_id: int,
     data: ActualizarEstadoRequest,
-    current=Depends(require_role("tecnico")),
+    current=Depends(require_role("tecnico", "admin")),
     db: AsyncSession = Depends(get_db),
 ):
     """
@@ -56,3 +56,22 @@ async def actualizar_estado(
         emergencia_id, data, taller_cod, db
     )
     return {"message": "Estado actualizado correctamente", "historial_id": historial.id}
+
+@router.post(
+    "/solicitudes/{emergencia_id}/finalizar",
+    summary="CU15 — Finalizar emergencia y solicitar pago",
+)
+async def finalizar_emergencia(
+    emergencia_id: int,
+    data: dict, # O usar FinalizarEmergenciaRequest si prefieres tipado fuerte
+    current=Depends(require_role("tecnico", "admin")),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    CU15: Gestión de Solicitud Taller —
+    Finaliza el servicio, genera el registro de pago y notifica al cliente 
+    el monto final acordado.
+    """
+    taller_cod = current.get("taller")
+    print(f"DEBUG FINALIZAR: user_id={current.get('user_id')}, role={current.get('role')}, taller={taller_cod}")
+    return await emergencia_service.finalizar_emergencia(emergencia_id, data, taller_cod, db)

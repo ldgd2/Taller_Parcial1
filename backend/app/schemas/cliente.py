@@ -15,16 +15,18 @@ class VehiculoCreate(BaseModel):
 
 
 class VehiculoOut(VehiculoCreate):
-    id: int
     idCliente: int
 
 
 # ─── Cliente ──────────────────────────────────────────────────────
 
-class ClienteCreate(BaseModel):
+class ClienteSimpleCreate(BaseModel):
     nombre: str
     correo: EmailStr
     contrasena: str
+
+
+class ClienteCreate(ClienteSimpleCreate):
     vehiculo: VehiculoCreate     # CU03: registro simultáneo vehículo
 
 

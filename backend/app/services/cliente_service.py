@@ -9,10 +9,9 @@ from sqlalchemy import select
 from app.models.cliente import Cliente
 from app.models.vehiculo import Vehiculo
 from app.core.security import hash_password
-from app.schemas.cliente import ClienteCreate, ClienteOut
+from app.schemas.cliente import ClienteCreate, ClienteOut, ClienteSimpleCreate
 
-
-async def registrar_cliente(data: ClienteCreate, db: AsyncSession) -> ClienteOut:
+async def registrar_cliente_solo(data: ClienteSimpleCreate, db: AsyncSession) -> ClienteOut:
     # Verificar correo único
     result = await db.execute(select(Cliente).where(Cliente.correo == data.correo))
     if result.scalar_one_or_none():
@@ -28,28 +27,39 @@ async def registrar_cliente(data: ClienteCreate, db: AsyncSession) -> ClienteOut
         contrasena=hash_password(data.contrasena),
     )
     db.add(cliente)
-    await db.flush()  # obtener el id sin hacer commit
-
-    # Crear vehículo vinculado
-    vehiculo = Vehiculo(
-        placa=data.vehiculo.placa,
-        marca=data.vehiculo.marca,
-        modelo=data.vehiculo.modelo,
-        anio=data.vehiculo.anio,
-        idCliente=cliente.id,
-    )
-    db.add(vehiculo)
     await db.flush()
-
     await db.refresh(cliente)
-    await db.refresh(vehiculo)
 
     return ClienteOut(
         id=cliente.id,
         nombre=cliente.nombre,
         correo=cliente.correo,
-        vehiculos=[vehiculo],  # Devolvemos el vehículo ahora que tenemos la placa
+        vehiculos=[],
     )
+
+async def registrar_cliente(data: ClienteCreate, db: AsyncSession) -> ClienteOut:
+    # 1. Crear el cliente primero
+    cliente_simple = ClienteSimpleCreate(
+        nombre=data.nombre,
+        correo=data.correo,
+        contrasena=data.contrasena
+    )
+    cliente_out = await registrar_cliente_solo(cliente_simple, db)
+
+    # 2. Crear vehículo vinculado
+    vehiculo = Vehiculo(
+        placa=data.vehiculo.placa,
+        marca=data.vehiculo.marca,
+        modelo=data.vehiculo.modelo,
+        anio=data.vehiculo.anio,
+        idCliente=cliente_out.id,
+    )
+    db.add(vehiculo)
+    await db.flush()
+    await db.refresh(vehiculo)
+
+    cliente_out.vehiculos = [vehiculo]
+    return cliente_out
 
 
 async def registrar_vehiculo_extra(cliente_id: int, data: VehiculoCreate, db: AsyncSession):
@@ -74,6 +84,13 @@ async def registrar_vehiculo_extra(cliente_id: int, data: VehiculoCreate, db: As
     return nuevo_vehiculo
 
 
+
+
+async def obtener_todos_los_clientes(db: AsyncSession):
+    result = await db.execute(
+        select(Cliente)
+    )
+    return result.scalars().all()
 
 
 async def obtener_vehiculos_cliente(cliente_id: int, db: AsyncSession):

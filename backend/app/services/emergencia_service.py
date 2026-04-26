@@ -25,6 +25,7 @@ from sqlalchemy.orm import selectinload, joinedload
 from app.services.ai_service import analizar_transcripcion_whisper
 from typing import List
 import math
+from app.services.notification_service import NotificationService
 
 
 # ─── CU04 ─────────────────────────────────────────────────────────
@@ -102,9 +103,20 @@ async def reportar_emergencia(
         idCategoria=categoria_id,
         idCliente=cliente_id,
         placaVehiculo=data.placaVehiculo,
-        audio_url=data.audio_url
+        audio_url=data.audio_url,
+        es_valida=True if not data.texto_adicional else True # Se actualizará abajo si la IA lo dice
     )
     db.add(emergencia)
+    await db.flush()
+
+    # Guardar Evidencias (Fotos)
+    from app.models.evidencia import Evidencia
+    for url in data.evidencias_urls:
+        evidencia = Evidencia(
+            direccion=url,
+            idEmergencia=emergencia.id
+        )
+        db.add(evidencia)
     await db.flush()
 
     # Guardar análisis IA si fue procesado
@@ -112,9 +124,14 @@ async def reportar_emergencia(
         resumen_ia = ResumenIA(
             resumen=resumen_taller,
             ficha_tecnica=ficha_tecnica,
+            recomendaciones_taller=ia_result.recomendaciones_taller if 'ia_result' in locals() else None,
+            motivo_rechazo=ia_result.motivo_rechazo if 'ia_result' in locals() else None,
             idEmergencia=emergencia.id
         )
         db.add(resumen_ia)
+        # Si la IA dice que no es válida, actualizamos la emergencia
+        if 'ia_result' in locals():
+            emergencia.es_valida = ia_result.es_valida
         await db.flush()
 
     # Registrar estado inicial -> PENDIENTE
@@ -144,7 +161,8 @@ async def obtener_emergencia_detalle(id: int, db: AsyncSession):
             selectinload(Emergencia.evidencias),
             selectinload(Emergencia.tecnicos_asignados).selectinload(Tecnico.especialidades),
             selectinload(Emergencia.historial).joinedload(HistorialEstado.estado),
-            joinedload(Emergencia.vehiculo)
+            joinedload(Emergencia.vehiculo),
+            joinedload(Emergencia.pago)
         )
         .where(Emergencia.id == id)
     )
@@ -182,7 +200,8 @@ async def listar_emergencias_cliente(cliente_id: int, db: AsyncSession):
             selectinload(Emergencia.evidencias),
             selectinload(Emergencia.tecnicos_asignados).selectinload(Tecnico.especialidades),
             selectinload(Emergencia.historial).joinedload(HistorialEstado.estado),
-            joinedload(Emergencia.vehiculo)
+            joinedload(Emergencia.vehiculo),
+            joinedload(Emergencia.pago)
         )
         .where(Emergencia.idCliente == cliente_id)
         .order_by(desc(Emergencia.fecha), desc(Emergencia.hora))
@@ -231,6 +250,21 @@ async def actualizar_estado_emergencia(
     )
     db.add(nuevo_historial)
     await db.flush()
+
+    # NOTIFICACIÓN AL CLIENTE (CU12)
+    try:
+        # Obtener nombre del nuevo estado para el mensaje
+        estado_nombre = (await db.execute(select(Estado.nombre).where(Estado.id == data.idEstado))).scalar()
+        await NotificationService.enviar_notificacion_usuario(
+            db, 
+            emergencia.idCliente, 
+            "Actualización de Servicio", 
+            f"Tu reporte '{emergencia.descripcion}' ahora está: {estado_nombre}",
+            {"emergencia_id": str(emergencia_id), "tipo": "estado_change"}
+        )
+    except Exception as e:
+        print(f"Error al enviar notificación: {e}")
+
     return nuevo_historial
 
 
@@ -244,7 +278,8 @@ async def listar_emergencias_taller(taller_cod: str, db: AsyncSession):
             selectinload(Emergencia.evidencias),
             selectinload(Emergencia.tecnicos_asignados).selectinload(Tecnico.especialidades),
             selectinload(Emergencia.historial).joinedload(HistorialEstado.estado),
-            joinedload(Emergencia.vehiculo)
+            joinedload(Emergencia.vehiculo),
+            joinedload(Emergencia.pago)
         )
         .where(Emergencia.idTaller == taller_cod)
         .order_by(desc(Emergencia.fecha), desc(Emergencia.hora))
@@ -302,21 +337,23 @@ async def listar_emergencias_disponibles(taller_cod: str, db: AsyncSession):
             selectinload(Emergencia.evidencias),
             selectinload(Emergencia.tecnicos_asignados).selectinload(Tecnico.especialidades),
             selectinload(Emergencia.historial).joinedload(HistorialEstado.estado),
-            joinedload(Emergencia.vehiculo)
+            joinedload(Emergencia.vehiculo),
+            joinedload(Emergencia.pago)
         )
         .where(Emergencia.idTaller.is_(None))
         .where(Emergencia.idEstado.in_(estados_validos)) 
+        .where(Emergencia.es_valida.is_(True)) # FILTRO DE CONTEXTO
         .where(CategoriaProblema.idEspecialidad.in_(especialidades_taller))
     )
     
     emergencias_res = await db.execute(stmt)
     todas_disponibles = emergencias_res.scalars().all()
 
-    # 4. Filtrar por distancia (50km)
+    # 4. Filtrar por distancia (10km)
     cercanas = []
     for e in todas_disponibles:
         dist = haversine_distance(taller.latitud, taller.longitud, e.latitud, e.longitud)
-        if dist <= 50: # Radio de 50km
+        if dist <= 10: # Radio de 10km
             _populate_dynamic_fields(e)
             cercanas.append(e)
             
@@ -335,47 +372,76 @@ async def bloquear_emergencia_temporal(emergencia_id: int, taller_cod: str, db: 
     return {"status": "locked", "expires_in": 120}
 
 async def asignar_emergencia_taller(emergencia_id: int, taller_cod: str, tecnicos_ids: List[int], db: AsyncSession):
-    """Asignación final atómica con uno o varios técnicos."""
-    async with db.begin():
-        res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
-        emergencia = res.scalar_one_or_none()
-        
-        if not emergencia:
-            raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
-        
-        if emergencia.idTaller and emergencia.idTaller != taller_cod:
-            raise HTTPException(status_code=400, detail="Esta emergencia ya fue tomada por otro taller.")
+    """Asignación final con uno o varios técnicos."""
+    # 1. Obtener emergencia
+    res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
+    emergencia = res.scalar_one_or_none()
+    
+    if not emergencia:
+        raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
+    
+    if emergencia.idTaller and emergencia.idTaller != taller_cod:
+        raise HTTPException(status_code=400, detail="Esta emergencia ya fue tomada por otro taller.")
 
-        # Realizar asignación
-        emergencia.idTaller = taller_cod
-        emergencia.locked_by = None
-        emergencia.locked_at = None
-        
-        # Registrar múltiples técnicos
-        # Primero limpiamos si hubiera algo (por re-asignacion del mismo taller)
-        from app.models.asignacion_tecnico_emergencia import AsignacionTecnicoEmergencia
-        await db.execute(
-            AsignacionTecnicoEmergencia.__table__.delete().where(
-                AsignacionTecnicoEmergencia.idEmergencia == emergencia_id
-            )
+    # 2. Realizar asignación
+    emergencia.idTaller = taller_cod
+    emergencia.locked_by = None
+    emergencia.locked_at = None
+    
+    # 3. Registrar técnicos
+    from app.models.asignacion_tecnico_emergencia import AsignacionTecnicoEmergencia
+    await db.execute(
+        AsignacionTecnicoEmergencia.__table__.delete().where(
+            AsignacionTecnicoEmergencia.idEmergencia == emergencia_id
         )
+    )
 
-        for t_id in tecnicos_ids:
-            asig = AsignacionTecnicoEmergencia(idEmergencia=emergencia_id, idTecnico=t_id)
-            db.add(asig)
-        
-        # Actualizar estado a 'ASIGNADO'
-        estado_res = await db.execute(select(Estado).where(Estado.nombre == "ASIGNADO"))
-        estado = estado_res.scalar_one_or_none()
-        
-        emergencia.idEstado = estado.id if estado else 2
-        historial = HistorialEstado(
-            idEmergencia=emergencia_id,
-            idEstado=emergencia.idEstado,
-        )
-        db.add(historial)
+    for t_id in tecnicos_ids:
+        asig = AsignacionTecnicoEmergencia(idEmergencia=emergencia_id, idTecnico=t_id)
+        db.add(asig)
+    
+    # 4. Actualizar estado a 'ASIGNADO'
+    estado_res = await db.execute(select(Estado).where(Estado.nombre == "ASIGNADO"))
+    estado = estado_res.scalar_one_or_none()
+    
+    emergencia.idEstado = estado.id if estado else 2
+    historial = HistorialEstado(
+        idEmergencia=emergencia_id,
+        idEstado=emergencia.idEstado,
+    )
+    db.add(historial)
         
     await db.commit()
+    # Refrescamos para tener los datos del objeto actualizados tras el commit
+    await db.refresh(emergencia)
+
+    # 5. NOTIFICACIÓN AL CLIENTE (CU12)
+    try:
+        taller_res = await db.execute(select(Taller).where(Taller.cod == taller_cod))
+        taller = taller_res.scalar_one_or_none()
+        
+        # Calcular distancia y tiempo estimado
+        distancia = haversine_distance(taller.latitud, taller.longitud, emergencia.latitud, emergencia.longitud)
+        tiempo_estimado = round(distancia * 2.5 + 5)
+        dist_str = f"{distancia:.1f} km"
+        
+        print(f"DEBUG: Intentando enviar notificación a Cliente {emergencia.idCliente}")
+        
+        await NotificationService.enviar_notificacion_usuario(
+            db, 
+            emergencia.idCliente, 
+            "¡Ayuda en camino! 🛠️", 
+            f"El taller '{taller.nombre}' ha aceptado tu solicitud. Está a {dist_str} y llegará en aprox. {tiempo_estimado} min. ¡Mantén la calma!",
+            {
+                "emergencia_id": str(emergencia_id), 
+                "tipo": "taller_asignado",
+                "distancia": dist_str,
+                "tiempo": str(tiempo_estimado)
+            }
+        )
+    except Exception as e:
+        print(f"Error al enviar notificación de asignación: {e}")
+
     return {"status": "ok", "message": f"Emergencia asignada a {len(tecnicos_ids)} técnicos."}
 
 
@@ -419,3 +485,86 @@ async def actualizar_ficha_tecnica(emergencia_id: int, data: dict, taller_cod: s
     await db.commit()
     return {"status": "ok", "message": "Ficha técnica actualizada correctamente."}
 
+
+async def finalizar_emergencia(
+    emergencia_id: int,
+    data: dict, # Usando dict o schema
+    taller_cod: str,
+    db: AsyncSession
+):
+    """
+    Finaliza el servicio, crea el registro de pago y notifica al cliente.
+    """
+    from app.models.pago import Pago
+    
+    try:
+        # 1. Validar emergencia
+        res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
+        emergencia = res.scalar_one_or_none()
+        
+        if not emergencia:
+            raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
+            
+        if emergencia.idTaller != taller_cod:
+            print(f"DEBUG 403: e.idTaller={emergencia.idTaller}, user.taller={taller_cod}")
+            raise HTTPException(status_code=403, detail="No tienes acceso a esta emergencia.")
+
+        # 2. Crear Pago
+        monto_raw = data.get("monto_total", 0)
+        try:
+            monto = float(monto_raw)
+        except:
+            monto = 0.0
+            
+        comision = monto * 0.10
+        
+        nuevo_pago = Pago(
+            monto=monto,
+            monto_comision=comision,
+            cliente_id=emergencia.idCliente,
+            emergencia_id=emergencia_id,
+            estado="PENDIENTE"
+        )
+        db.add(nuevo_pago)
+        await db.flush()
+        
+        # 3. Actualizar Emergencia
+        emergencia.idPago = nuevo_pago.id
+        
+        # Cambiar a estado ATENDIDO (ID 6 según check_states.py)
+        emergencia.idEstado = 6
+        historial = HistorialEstado(
+            idEmergencia=emergencia_id,
+            idEstado=6,
+        )
+        db.add(historial)
+        
+        await db.commit()
+        
+        # 4. Notificar al Cliente
+        try:
+            await NotificationService.enviar_notificacion_usuario(
+                db,
+                emergencia.idCliente,
+                "¡Trabajo Terminado! ✅",
+                f"El taller ha finalizado el servicio. El monto total a pagar es: ${monto:.2f}. Por favor, procede al pago.",
+                {
+                    "emergencia_id": str(emergencia_id),
+                    "tipo": "pago_pendiente",
+                    "monto": str(monto)
+                }
+            )
+        except Exception as e:
+            print(f"Error enviando notificación de finalización: {e}")
+
+        return {"status": "ok", "message": "Emergencia finalizada y cliente notificado."}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        error_msg = f"Error en finalizar_emergencia: {str(e)}\n{traceback.format_exc()}"
+        print(error_msg)
+        with open("error_log.txt", "a") as f:
+            f.write("\n" + "="*50 + "\n" + error_msg + "\n")
+        raise HTTPException(status_code=500, detail="Error interno del servidor al finalizar.")

@@ -12,6 +12,7 @@ class Usuario(Base):
     correo = Column(String(255), nullable=False, unique=True, index=True)
     contrasena = Column("contraseña", String(255), nullable=False)
     estado = Column(String(20), nullable=False, server_default="ACTIVO", default="ACTIVO")
+    fcm_token = Column(String(512), nullable=True)
     idTaller = Column(String(10), ForeignKey("taller.cod"), nullable=False, index=True)
 
     # Relaciones

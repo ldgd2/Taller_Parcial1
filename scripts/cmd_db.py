@@ -36,6 +36,8 @@ def add_subparser(parser):
     parser_migrate.add_argument("-m", "--message", required=True, help="Mensaje para documentar la migracion")
     
     subparsers.add_parser("upgrade", help="Aplica las migraciones Alembic pendientes a la Base de Datos")
+    subparsers.add_parser("sync", help="Autogenera y aplica la migracion en un solo paso")
+    subparsers.add_parser("stamp", help="Marca la BD con la version actual (Fix si hay desincronizacion)")
     
     # Nuevos comandos del paquete db_tools
     subparsers.add_parser("reset", help="[PELIGRO] Destruye el esquema y recrea BD desde Head de Alembic")
@@ -52,6 +54,7 @@ def add_subparser(parser):
 def execute(args):
     target = args.target
 
+    import time
     python_cmd = sys.executable
     alembic_exe_list = [sys.executable, "-m", "alembic"]
 
@@ -79,6 +82,18 @@ def execute(args):
             do_status("Aplicando migraciones estructurales a Head...", "Aplicando migraciones estructurales a Head...", 
                       lambda: subprocess.run([*alembic_exe_list, "upgrade", "head"], check=True))
             cprint("[bold green]Base de datos actualizada a la version Head.[/bold green]", "Base de datos actualizada a la version Head.")
+
+        elif target == "sync":
+            msg = f"auto_sync_{int(time.time())}"
+            do_status(f"Generando y aplicando cambios estructurales...", "Sincronizando...", 
+                      lambda: (subprocess.run([*alembic_exe_list, "revision", "--autogenerate", "-m", msg], check=True), 
+                               subprocess.run([*alembic_exe_list, "upgrade", "head"], check=True)))
+            cprint(f"[bold green]Base de datos sincronizada con éxito (Migración: {msg})[/bold green]", "BD Sincronizada.")
+
+        elif target == "stamp":
+            do_status("Estampando version Head en la BD...", "Estampando...", 
+                      lambda: subprocess.run([*alembic_exe_list, "stamp", "head"], check=True))
+            cprint("[bold green]BD marcada como actualizada con éxito.[/bold green]", "BD Stamp completado.")
 
         # ---- Logica conectada a scripts/db_tools ----
         elif target == "reset":
@@ -131,8 +146,9 @@ def interactive_menu():
     choices = [
         "Init (Tablas iniciales)", 
         "Seed (Datos base)", 
-        "Migrate (Nueva versión)", 
+        "Sync (Auto-Migrate + Upgrade)",
         "Upgrade (Aplicar cambios)", 
+        "Stamp (Fix Desincronización)",
         "Reset (Limpiar y Recrear)", 
         "Populate (Data Falsa)", 
         "Debug Serialización",
