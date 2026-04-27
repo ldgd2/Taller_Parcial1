@@ -24,12 +24,21 @@ async def analizar_transcripcion_whisper(
     """
     cat_str = ", ".join([f"{c['id']}:{c['nombre']}" for c in categorias_disponibles])
     pri_str = ", ".join([f"{p['id']}:{p['nombre']}" for p in prioridades_disponibles])
-    
+
+    tiene_imagenes = len(evidencias_urls) > 0
+
+    if tiene_imagenes:
+        contexto_media = "Analiza el reporte de voz/texto Y LAS IMÁGENES adjuntas."
+        regla_oro = "REGLA DE ORO: En el campo \"resumen_taller\", DEBES mencionar explícitamente qué observas en las fotos para respaldar tu diagnóstico."
+    else:
+        contexto_media = "Analiza ÚNICAMENTE el reporte de voz/texto transcrito. NO hay imágenes adjuntas."
+        regla_oro = "REGLA DE ORO: Basa tu diagnóstico SOLO en lo que el cliente describió con palabras. NO menciones ni supongas imágenes, fotos ni evidencias visuales."
+
     system_prompt = f"""
-Eres un mecánico experto en diagnóstico remoto. Analiza el reporte de voz/texto y LAS IMÁGENES adjuntas.
+Eres un mecánico experto en diagnóstico remoto. {contexto_media}
 Debes responder ÚNICAMENTE con un objeto JSON.
 
-REGLA DE ORO: En el campo "resumen_taller", DEBES mencionar explícitamente qué observas en las fotos para respaldar tu diagnóstico.
+{regla_oro}
 
 VEHÍCULO: {vehiculo_info}
 CATEGORÍAS (ID:Nombre): {cat_str}
