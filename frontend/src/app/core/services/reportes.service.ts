@@ -38,8 +38,27 @@ export class ReportesService {
   }
 
   downloadPdf(mes: number, anio: number): void {
-    const serverUrl = this.configService.apiUrl.replace('/api/v1', '');
-    const url = `${serverUrl}/api/v1/reportes/pdf?mes=${mes}&anio=${anio}`;
-    window.open(url, '_blank');
+    const token = localStorage.getItem('access_token');
+    const url = `${this.configService.apiUrl}/reportes/pdf?mes=${mes}&anio=${anio}`;
+
+    fetch(url, {
+      method: 'GET',
+      headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+    })
+      .then(res => {
+        if (!res.ok) throw new Error(`Error ${res.status}: ${res.statusText}`);
+        return res.blob();
+      })
+      .then(blob => {
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = `reporte_${mes}_${anio}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      })
+      .catch(err => console.error('❌ Error descargando reporte PDF:', err));
   }
 }
