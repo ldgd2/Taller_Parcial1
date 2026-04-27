@@ -39,7 +39,7 @@ import { LucideAngularModule } from 'lucide-angular';
              <span class="font-mono text-[9px] font-bold uppercase tracking-[.25em] text-zinc-300">SISTEMA DE DESPACHO ACTIVO</span>
            </div>
            
-           <h1 class="text-5xl md:text-6xl lg:text-[80px] font-extrabold tracking-tighter uppercase leading-[0.95] mb-8">
+           <h1 class="text-5xl md:text-6xl lg:text-[80px] font-extrabold tracking-tighter uppercase leading-[0.95] mb-8 text-white">
              LA EMERGENCIA NO<br/>ESPERA. TU TALLER<br/>TAMPOCO.
            </h1>
            
@@ -63,7 +63,7 @@ import { LucideAngularModule } from 'lucide-angular';
         <div class="max-w-[1600px] mx-auto px-6 py-32">
           <div class="mb-20">
             <span class="font-mono text-[10px] uppercase tracking-[.25em] text-[#FF5733] font-bold block mb-4">EL PROCESO</span>
-            <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight uppercase">DEL CAMPO AL TALLER EN SEGUNDOS.</h2>
+            <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight uppercase text-white">DEL CAMPO AL TALLER EN SEGUNDOS.</h2>
           </div>
 
           <div class="grid grid-cols-1 md:grid-cols-3 gap-0 border border-[#222222]">
@@ -105,7 +105,7 @@ import { LucideAngularModule } from 'lucide-angular';
       <section class="max-w-[1600px] mx-auto px-6 py-32 grid grid-cols-1 lg:grid-cols-2 gap-20 items-center">
         <div>
           <span class="font-mono text-[10px] uppercase tracking-[.25em] text-[#FF5733] font-bold block mb-4">TRANSFORMACIÓN</span>
-          <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight uppercase leading-tight mb-8">DE CAOS AL CONTROL MILIMÉTRICO.</h2>
+          <h2 class="text-4xl md:text-5xl font-extrabold tracking-tight uppercase leading-tight mb-8 text-white">DE CAOS AL CONTROL MILIMÉTRICO.</h2>
           <p class="text-zinc-400 text-lg leading-relaxed mb-12">
              Olvida las notas escritas a mano, los mensajes de voz incomprensibles y las fotos borrosas. FieldWork estructura el desastre en un expediente técnico inmutable.
           </p>
