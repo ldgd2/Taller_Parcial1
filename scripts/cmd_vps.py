@@ -51,11 +51,16 @@ def interactive_menu():
             "2. Verificar Estado de Servicios (Solo Linux)",
             "3. Reiniciar Todos los Servicios (Solo Linux)",
             "4. Eliminar Servicios Systemd (Solo Linux)",
-            "5. Editar IP y Puertos (.env + Sync)",
-            "6. Volver al Menú Principal"
+            "5. Ver Logs en Tiempo Real (Backend)",
+            "6. Ver Logs en Tiempo Real (Frontend)",
+            "7. Editar IP y Puertos (.env + Sync)",
+            "8. Volver al Menú Principal"
         ]
     ).ask()
 
+    if choice is None:
+        return
+    
     if "Crear" in choice:
         setup_vps_services()
     elif "Verificar" in choice:
@@ -64,6 +69,10 @@ def interactive_menu():
         restart_services()
     elif "Eliminar" in choice:
         delete_services()
+    elif "Logs" in choice and "Backend" in choice:
+        view_logs("backend")
+    elif "Logs" in choice and "Frontend" in choice:
+        view_logs("frontend")
     elif "Editar" in choice:
         edit_network_config()
 
@@ -219,3 +228,15 @@ def delete_services():
     os.system("sudo systemctl daemon-reload")
     cprint("[bold green]✔ Servicios eliminados correctamente del sistema.[/bold green]", "Servicios eliminados.")
     time.sleep(2)
+
+def view_logs(target):
+    if platform.system() == "Windows":
+        cprint("[red]Esta opción solo funciona en Linux/VPS.[/red]", "Solo Linux.")
+        return
+    
+    cprint(f"[bold cyan]Mostrando logs en TIEMPO REAL de taller-{target} (Presiona Ctrl+C para salir)[/bold cyan]", f"Logs de {target}")
+    try:
+        os.system(f"sudo journalctl -u taller-{target}.service -f -n 100")
+    except KeyboardInterrupt:
+        pass
+    print()
