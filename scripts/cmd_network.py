@@ -90,38 +90,55 @@ def configure_network():
     elif "Personalizada" in choice:
         target_host = questionary.text("Introduce la IP o Host deseado:").ask() if HAS_RICH else input("IP/Host: ")
 
-    # 1. Actualizar Backend .env (DATABASE_URL)
-    # Asumimos que la DB es local, pero el Host del servidor de la App es el que cambia.
-    # Sin embargo, si el usuario quiere que TODO se base en esa IP, podriamos cambiar el host de la DB.
-    # Por ahora cambiamos el host del DATABASE_URL si contiene localhost.
+    if HAS_RICH:
+        target_port = questionary.text("Introduce el puerto del Backend (default: 8000):", default="8000").ask()
+    else:
+        target_port = input("Introduce el puerto del Backend (default: 8000): ")
+        if not target_port:
+            target_port = "8000"
+
     # 1. Actualizar .env en la raíz
     env_path = ".env"
     if os.path.exists(env_path):
-        # Intentamos actualizar el host de la DB solo si el usuario lo confirma o es necesario.
-        # Pero lo mas critico es el API URL del frontend.
         update_env_variable("APP_HOST", target_host)
-        print(f"[OK] APP_HOST actualizado a {target_host} en .env")
+        update_env_variable("APP_PORT_BACKEND", target_port)
+        print(f"[OK] APP_HOST y APP_PORT_BACKEND actualizados a {target_host}:{target_port} en .env")
 
     # 2. Actualizar Frontend environment.ts
     front_env = os.path.join("frontend", "src", "environments", "environment.ts")
     if os.path.exists(front_env):
-        # Reemplazamos lo que este en apiUrl: 'http://...:8000/api/v1'
-        # Buscamos 'http://localhost' o 'http://127.0.0.1' o una IP anterior.
-        # Para ser mas precisos, leemos el archivo y buscamos el patron del apiUrl.
         import re
         with open(front_env, 'r', encoding='utf-8') as f:
             content = f.read()
         
-        # Regex para capturar el host entre http:// y :8000
-        # Corregimos el error del rf'\1...' que colisionaba con IPs que inician con 1 (\11)
-        # Usamos \g<1> para evitar la ambigüedad con los dígitos de la IP
-        new_content = re.sub(r'(http://).*?(:8000)', r'\g<1>' + target_host + r'\g<2>', content)
+        # Regex para reemplazar http://[host]:[port]/api/v1
+        new_content = re.sub(r'(http://)[^/:]+(:\d+)?(/api/v1)', r'\g<1>' + target_host + f':{target_port}' + r'\g<3>', content)
         with open(front_env, 'w', encoding='utf-8') as f:
             f.write(new_content)
-        print(f"[OK] Frontend API URL actualizado a http://{target_host}:8000 en environment.ts")
+        print(f"[OK] Frontend API URL actualizado a http://{target_host}:{target_port} en environment.ts")
+
+    # 3. Actualizar Frontend config.json
+    config_json_path = os.path.join("frontend", "src", "assets", "config.json")
+    import json
+    config_dir = os.path.dirname(config_json_path)
+    if not os.path.exists(config_dir):
+        os.makedirs(config_dir, exist_ok=True)
+        
+    config_data = {}
+    if os.path.exists(config_json_path):
+        try:
+            with open(config_json_path, 'r', encoding='utf-8') as f:
+                config_data = json.load(f)
+        except Exception:
+            pass
+            
+    config_data["apiUrl"] = f"http://{target_host}:{target_port}/api/v1"
+    with open(config_json_path, 'w', encoding='utf-8') as f:
+        json.dump(config_data, f, indent=2)
+    print(f"[OK] Frontend API URL actualizado a http://{target_host}:{target_port}/api/v1 en config.json")
 
     if HAS_RICH:
-        console.print(f"[bold green]Sincronización de red completada con éxito para host: {target_host}[/bold green]")
+        console.print(f"[bold green]Sincronización de red completada con éxito para host: {target_host}:{target_port}[/bold green]")
 
 def interactive_menu():
     """Interfaz interactiva delegada para Red."""
