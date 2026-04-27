@@ -1,6 +1,7 @@
-import { ApplicationConfig, importProvidersFrom } from '@angular/core';
+import { ApplicationConfig, importProvidersFrom, APP_INITIALIZER } from '@angular/core';
 import { provideRouter } from '@angular/router';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { ConfigService } from './core/config/config.service';
 import { 
   LucideAngularModule, 
   Home, Menu, User, Settings, AlertTriangle, Hammer, Users, 
@@ -19,6 +20,12 @@ export const appConfig: ApplicationConfig = {
   providers: [
     provideRouter(routes),
     provideHttpClient(withInterceptors([authInterceptor])),
+    {
+      provide: APP_INITIALIZER,
+      useFactory: (configService: ConfigService) => () => configService.loadConfig(),
+      deps: [ConfigService],
+      multi: true
+    },
     provideCharts(withDefaultRegisterables()),
     importProvidersFrom(
       LucideAngularModule.pick({ 

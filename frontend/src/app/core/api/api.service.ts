@@ -1,17 +1,17 @@
 import { Injectable, inject } from '@angular/core';
 import { HttpClient, HttpHeaders, HttpParams } from '@angular/common/http';
 import { Observable } from 'rxjs';
-import { environment } from '../../../environments/environment';
+import { ConfigService } from '../config/config.service';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ApiService {
   private http = inject(HttpClient);
+  private configService = inject(ConfigService);
   
-  // Endpoint base que apunta al backend FastAPI (Ej: http://localhost:8000/api/v1)
   private get baseUrl(): string {
-    return environment.apiUrl || 'http://localhost:8000/api/v1';
+    return this.configService.apiUrl;
   }
 
   get<T>(path: string, params: HttpParams = new HttpParams()): Observable<T> {

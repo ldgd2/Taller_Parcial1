@@ -49,7 +49,8 @@ def interactive_menu():
             "1. Crear Servicios Systemd (Backend/Frontend)",
             "2. Verificar Estado de Servicios (Solo Linux)",
             "3. Reiniciar Todos los Servicios (Solo Linux)",
-            "4. Volver al Menú Principal"
+            "4. Editar IP y Puertos (.env + Sync)",
+            "5. Volver al Menú Principal"
         ]
     ).ask()
 
@@ -59,6 +60,20 @@ def interactive_menu():
         check_services()
     elif "Reiniciar" in choice:
         restart_services()
+    elif "Editar" in choice:
+        edit_network_config()
+
+def edit_network_config():
+    public_ip = get_public_ip()
+    cprint(f"[dim]IP Detectada:[/dim] [bold green]{public_ip}[/bold green]", f"IP: {public_ip}")
+    
+    port_back = questionary.text("Nuevo puerto para BACKEND:", default="8000").ask()
+    
+    update_env_file(public_ip, port_back)
+    sync_env_to_angular(public_ip, port_back)
+    
+    cprint("[bold green]✔ Configuración de red actualizada y sincronizada.[/bold green]", "Configuración actualizada.")
+    time.sleep(2)
 
 def setup_vps_services():
     public_ip = get_public_ip()
@@ -67,13 +82,19 @@ def setup_vps_services():
     port_back = questionary.text("Puerto para el servicio BACKEND (FastAPI):", default="8000").ask()
     port_front = questionary.text("Puerto para el servicio FRONTEND (Angular DEV):", default="4200").ask()
     
+    # 1. Actualizar .env con los nuevos valores
+    update_env_file(public_ip, port_back)
+    
+    # 2. Sincronizar con Angular environment.ts
+    sync_env_to_angular(public_ip, port_back)
+
     cwd = os.getcwd()
     user = getpass.getuser()
     
     if not os.path.exists("deploy"):
         os.makedirs("deploy")
-
-    # --- BACKEND SERVICE (Uvicorn) ---
+    
+    # ... rest of the service generation ...
     backend_svc = f"""[Unit]
 Description=Servicio Taller Backend (Dev Mode)
 After=network.target
@@ -93,8 +114,6 @@ WantedBy=multi-user.target
     with open("deploy/taller-backend.service", "w") as f:
         f.write(backend_svc)
 
-    # --- FRONTEND SERVICE (Angular Dev Server) ---
-    # Usamos npm start pasándole host y puerto para que sea accesible externamente
     frontend_svc = f"""[Unit]
 Description=Servicio Taller Frontend (Angular Dev)
 After=network.target
@@ -102,6 +121,7 @@ After=network.target
 [Service]
 User={user}
 WorkingDirectory={cwd}/frontend
+ExecStartPre={cwd}/.venv/bin/python {cwd}/scripts/sync_env.py
 ExecStart=/usr/bin/npm start -- --host 0.0.0.0 --port {port_front} --disable-host-check
 Restart=always
 RestartSec=10
@@ -112,7 +132,7 @@ WantedBy=multi-user.target
     with open("deploy/taller-frontend.service", "w") as f:
         f.write(frontend_svc)
 
-    cprint("\n[bold green]✔ Servicios GENERADOS (SIN NGINX) en ./deploy/[/bold green]", "Servicios generados (SIN NGINX).")
+    cprint("\n[bold green]✔ Servicios GENERADOS e .env Sincronizado.[/bold green]", "Servicios generados.")
     
     if platform.system() != "Windows":
         install = questionary.confirm("¿Deseas instalar y activar estos servicios de ejecución ahora mismo?").ask()
@@ -127,6 +147,32 @@ WantedBy=multi-user.target
             cprint(f"[bold cyan]Frontend:[/bold cyan] http://{public_ip}:{port_front}", f"Frontend: {public_ip}:{port_front}")
     else:
         cprint("[yellow]⚠ Instrucciones:[/yellow] Copia los archivos de ./deploy/ a /etc/systemd/system/ en tu Ubuntu.", "Copia los archivos a /etc/systemd/system/.")
+
+def update_env_file(ip, port):
+    lines = []
+    if os.path.exists(".env"):
+        with open(".env", "r") as f:
+            lines = f.readlines()
+    
+    # Filtrar lineas antiguas
+    lines = [l for l in lines if not l.startswith("APP_HOST=") and not l.startswith("APP_PORT_BACKEND=")]
+    lines.append(f"APP_HOST={ip}\n")
+    lines.append(f"APP_PORT_BACKEND={port}\n")
+    
+    with open(".env", "w") as f:
+        f.writelines(lines)
+    cprint("[green]✔ Archivo .env actualizado con la IP y Puerto.[/green]", ".env actualizado.")
+
+def sync_env_to_angular(ip, port):
+    config_path = "frontend/src/assets/config.json"
+    import json
+    config = {
+        "apiUrl": f"http://{ip}:{port}/api/v1"
+    }
+    os.makedirs(os.path.dirname(config_path), exist_ok=True)
+    with open(config_path, "w") as f:
+        json.dump(config, f, indent=2)
+    cprint(f"[green]✔ Assets/config.json sincronizado con Backend en {ip}:{port}[/green]", "Config.json sincronizado.")
 
 def check_services():
     if platform.system() == "Windows":
