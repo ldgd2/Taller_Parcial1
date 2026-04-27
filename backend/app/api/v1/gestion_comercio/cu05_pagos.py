@@ -342,22 +342,28 @@ async def obtener_pago(
     db: AsyncSession = Depends(get_db),
 ):
     """Retorna el registro de pago asociado a la emergencia, si existe."""
-    from sqlalchemy.orm import selectinload
-    res = await db.execute(
-        select(Emergencia).options(selectinload(Emergencia.pago)).where(Emergencia.id == emergencia_id)
-    )
-    emergencia = res.unique().scalar_one_or_none()
+    # 1. Verificar que la emergencia existe (query simple, sin relaciones)
+    emg_res = await db.execute(select(Emergencia).where(Emergencia.id == emergencia_id))
+    emergencia = emg_res.scalar_one_or_none()
     if not emergencia:
         raise HTTPException(status_code=404, detail="Emergencia no encontrada")
 
-    # Seguridad: Validar propiedad según el rol
+    # 2. Seguridad: Validar propiedad según el rol
     if current["role"] == "cliente" and emergencia.idCliente != current["user_id"]:
         raise HTTPException(status_code=403, detail="No tienes permiso para ver este pago")
     elif current["role"] == "tecnico" and emergencia.idTaller != current.get("taller"):
         raise HTTPException(status_code=403, detail="Esta emergencia no pertenece a tu taller")
-    # Los admins pueden ver cualquier pago por ahora para evitar bloqueos
 
-    if not emergencia.pago:
+    # 3. Obtener el pago directamente de la tabla Pago (evita problemas de relación)
+    # Si hay múltiples pagos (ej. uno inicial en $0 y el real), tomamos el más reciente
+    pago_res = await db.execute(
+        select(Pago)
+        .where(Pago.emergencia_id == emergencia_id)
+        .order_by(Pago.id.desc())
+    )
+    pago = pago_res.scalars().first()
+
+    if not pago:
         raise HTTPException(status_code=404, detail="Pago no registrado para esta emergencia")
-    
-    return emergencia.pago
+
+    return pago
