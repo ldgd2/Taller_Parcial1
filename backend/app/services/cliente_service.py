@@ -10,6 +10,7 @@ from app.models.cliente import Cliente
 from app.models.vehiculo import Vehiculo
 from app.core.security import hash_password
 from app.schemas.cliente import ClienteCreate, ClienteOut, ClienteSimpleCreate
+from app.schemas.vehiculo import VehiculoCreate
 
 async def registrar_cliente_solo(data: ClienteSimpleCreate, db: AsyncSession) -> ClienteOut:
     result = await db.execute(select(Cliente).where(Cliente.correo == data.correo))
