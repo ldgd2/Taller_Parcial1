@@ -5,6 +5,7 @@ import socket
 import urllib.request
 import subprocess
 import time
+import sys
 
 HAS_RICH = False
 HAS_QUESTIONARY = False
@@ -49,8 +50,9 @@ def interactive_menu():
             "1. Crear Servicios Systemd (Backend/Frontend)",
             "2. Verificar Estado de Servicios (Solo Linux)",
             "3. Reiniciar Todos los Servicios (Solo Linux)",
-            "4. Editar IP y Puertos (.env + Sync)",
-            "5. Volver al Menú Principal"
+            "4. Eliminar Servicios Systemd (Solo Linux)",
+            "5. Editar IP y Puertos (.env + Sync)",
+            "6. Volver al Menú Principal"
         ]
     ).ask()
 
@@ -60,6 +62,8 @@ def interactive_menu():
         check_services()
     elif "Reiniciar" in choice:
         restart_services()
+    elif "Eliminar" in choice:
+        delete_services()
     elif "Editar" in choice:
         edit_network_config()
 
@@ -90,6 +94,7 @@ def setup_vps_services():
 
     cwd = os.getcwd()
     user = getpass.getuser()
+    python_exe = sys.executable
     
     if not os.path.exists("deploy"):
         os.makedirs("deploy")
@@ -102,9 +107,8 @@ After=network.target
 [Service]
 User={user}
 WorkingDirectory={cwd}/backend
-Environment="PATH={cwd}/backend/.venv/bin"
 EnvironmentFile={cwd}/.env
-ExecStart={cwd}/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port {port_back}
+ExecStart={python_exe} -m uvicorn main:app --host 0.0.0.0 --port {port_back}
 Restart=always
 RestartSec=5
 
@@ -121,7 +125,7 @@ After=network.target
 [Service]
 User={user}
 WorkingDirectory={cwd}/frontend
-ExecStartPre={cwd}/.venv/bin/python {cwd}/scripts/sync_env.py
+ExecStartPre={python_exe} {cwd}/scripts/sync_env.py
 ExecStart=/usr/bin/npm start -- --host 0.0.0.0 --port {port_front} --disable-host-check
 Restart=always
 RestartSec=10
@@ -137,6 +141,8 @@ WantedBy=multi-user.target
     if platform.system() != "Windows":
         install = questionary.confirm("¿Deseas instalar y activar estos servicios de ejecución ahora mismo?").ask()
         if install:
+            os.system("sudo systemctl stop taller-backend taller-frontend 2>/dev/null")
+            os.system("sudo systemctl disable taller-backend taller-frontend 2>/dev/null")
             os.system(f"sudo cp {cwd}/deploy/taller-backend.service /etc/systemd/system/")
             os.system(f"sudo cp {cwd}/deploy/taller-frontend.service /etc/systemd/system/")
             os.system("sudo systemctl daemon-reload")
@@ -194,4 +200,22 @@ def restart_services():
     cprint("[yellow]Reiniciando servicios de ejecución...[/yellow]", "Reiniciando...")
     os.system("sudo systemctl restart taller-backend taller-frontend")
     cprint("[bold green]✔ Servicios reiniciados.[/bold green]", "Reiniciado.")
+    time.sleep(2)
+
+def delete_services():
+    if platform.system() == "Windows":
+        cprint("[red]Esta opción solo funciona en Linux/VPS.[/red]", "Solo Linux.")
+        return
+    
+    confirm = questionary.confirm("¿Estás seguro de detener y eliminar los servicios taller-backend y taller-frontend?").ask() if HAS_QUESTIONARY else True
+    if not confirm:
+        return
+        
+    cprint("[yellow]Deteniendo y eliminando servicios...[/yellow]", "Eliminando...")
+    os.system("sudo systemctl stop taller-backend taller-frontend 2>/dev/null")
+    os.system("sudo systemctl disable taller-backend taller-frontend 2>/dev/null")
+    os.system("sudo rm -f /etc/systemd/system/taller-backend.service")
+    os.system("sudo rm -f /etc/systemd/system/taller-frontend.service")
+    os.system("sudo systemctl daemon-reload")
+    cprint("[bold green]✔ Servicios eliminados correctamente del sistema.[/bold green]", "Servicios eliminados.")
     time.sleep(2)
