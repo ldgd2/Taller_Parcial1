@@ -51,11 +51,11 @@ async def registrar_pago(
     Calcula automáticamente la comisión del 10% y el monto neto al taller.
     """
     # 1. Verificar que la emergencia existe
-    from sqlalchemy.orm import joinedload
+    from sqlalchemy.orm import selectinload
     res = await db.execute(
-        select(Emergencia).options(joinedload(Emergencia.pago)).where(Emergencia.id == emergencia_id)
+        select(Emergencia).options(selectinload(Emergencia.pago)).where(Emergencia.id == emergencia_id)
     )
-    emergencia = res.scalar_one_or_none()
+    emergencia = res.unique().scalar_one_or_none()
     if not emergencia:
         raise HTTPException(status_code=404, detail="Emergencia no encontrada.")
 
@@ -342,11 +342,11 @@ async def obtener_pago(
     db: AsyncSession = Depends(get_db),
 ):
     """Retorna el registro de pago asociado a la emergencia, si existe."""
-    from sqlalchemy.orm import joinedload
+    from sqlalchemy.orm import selectinload
     res = await db.execute(
-        select(Emergencia).options(joinedload(Emergencia.pago)).where(Emergencia.id == emergencia_id)
+        select(Emergencia).options(selectinload(Emergencia.pago)).where(Emergencia.id == emergencia_id)
     )
-    emergencia = res.scalar_one_or_none()
+    emergencia = res.unique().scalar_one_or_none()
     if not emergencia:
         raise HTTPException(status_code=404, detail="Emergencia no encontrada")
 

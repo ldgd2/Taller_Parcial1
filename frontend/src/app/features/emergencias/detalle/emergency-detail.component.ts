@@ -61,7 +61,7 @@ import { ConfigService } from '../../../core/config/config.service';
             <button *ngIf="(emergency?.estado_actual === 'ATENDIDO' || emergency?.estado_actual === 'FINALIZADA') && emergency?.pago"
                     (click)="downloadFactura()"
                     class="bg-blue-600 text-white px-6 py-3 font-bold text-[9px] uppercase tracking-[.25em] transition-all hover:bg-blue-500 flex items-center gap-2">
-              <lucide-icon name="download" size="14"></lucide-icon>
+              <lucide-icon name="arrow-down-to-line" size="14"></lucide-icon>
               Factura PDF
             </button>
         </div>
