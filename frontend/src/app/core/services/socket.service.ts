@@ -1,6 +1,6 @@
-import { Injectable } from '@angular/core';
+import { Injectable, inject } from '@angular/core';
 import { Subject, Observable } from 'rxjs';
-import { environment } from '../../../environments/environment';
+import { ConfigService } from '../config/config.service';
 
 @Injectable({
   providedIn: 'root'
@@ -11,6 +11,7 @@ export class SocketService {
   private retryCount = 0;
   private readonly maxRetries = 3;
   private clientId: string | null = null;
+  private configService = inject(ConfigService);
 
   constructor() { }
 
@@ -20,7 +21,7 @@ export class SocketService {
     }
 
     this.clientId = clientId;
-    const wsUrl = environment.apiUrl.replace('http', 'ws') + '/ws/' + clientId;
+    const wsUrl = this.configService.apiUrl.replace('http', 'ws') + '/ws/' + clientId;
     
     console.log(`📡 Attempting WebSocket connection to: ${wsUrl}`);
     this.socket = new WebSocket(wsUrl);
