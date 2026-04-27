@@ -207,7 +207,7 @@ async def obtener_emergencia_detalle(id: int, db: AsyncSession):
             selectinload(Emergencia.tecnicos_asignados).selectinload(Tecnico.especialidades),
             selectinload(Emergencia.historial).joinedload(HistorialEstado.estado),
             joinedload(Emergencia.vehiculo),
-            joinedload(Emergencia.pago)
+            selectinload(Emergencia.pago)
         )
         .where(Emergencia.id == id)
     )
@@ -778,7 +778,7 @@ async def obtener_emergencia_por_id(emergencia_id: int, db: AsyncSession) -> Eme
             selectinload(Emergencia.historial).joinedload(HistorialEstado.estado),
             joinedload(Emergencia.vehiculo),
             joinedload(Emergencia.estado),
-            joinedload(Emergencia.pago)
+            selectinload(Emergencia.pago)
         )
         .where(Emergencia.id == emergencia_id)
     )
