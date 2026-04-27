@@ -212,7 +212,7 @@ async def obtener_emergencia_detalle(id: int, db: AsyncSession):
         .where(Emergencia.id == id)
     )
     res = await db.execute(stmt)
-    emergencia = res.scalar_one_or_none()
+    emergencia = res.unique().scalar_one_or_none()
     if emergencia:
         _populate_dynamic_fields(emergencia)
     return emergencia
@@ -783,7 +783,7 @@ async def obtener_emergencia_por_id(emergencia_id: int, db: AsyncSession) -> Eme
         .where(Emergencia.id == emergencia_id)
     )
     result = await db.execute(stmt)
-    emergencia = result.scalar_one_or_none()
+    emergencia = result.unique().scalar_one_or_none()
     if not emergencia:
         raise HTTPException(status_code=404, detail="Emergencia no encontrada")
     
