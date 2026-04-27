@@ -268,7 +268,7 @@ class _EmergencyDetailViewState extends State<EmergencyDetailView> {
                         icon: Icons.picture_as_pdf,
                         variant: TButtonVariant.outline,
                         onPressed: () async {
-                          final url = Uri.parse('${ApiClient.serverUrl}/facturacion/${e['idPago']}/pdf');
+                          final url = Uri.parse('${ApiClient.baseUrl}/facturacion/${e['id']}/pdf');
                           if (await canLaunchUrl(url)) {
                             await launchUrl(url, mode: LaunchMode.externalApplication);
                           } else {

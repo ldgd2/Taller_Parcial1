@@ -1,5 +1,6 @@
 import { Injectable, inject } from '@angular/core';
 import { ApiService } from '../api/api.service';
+import { ConfigService } from '../config/config.service';
 import { Observable } from 'rxjs';
 import { HttpParams } from '@angular/common/http';
 
@@ -27,6 +28,7 @@ export interface StatsResponse {
 })
 export class ReportesService {
   private api = inject(ApiService);
+  private configService = inject(ConfigService);
 
   getStats(mes: number, anio: number): Observable<StatsResponse> {
     const params = new HttpParams()
@@ -36,7 +38,8 @@ export class ReportesService {
   }
 
   downloadPdf(mes: number, anio: number): void {
-    const url = `http://localhost:8000/api/v1/reportes/pdf?mes=${mes}&anio=${anio}`;
+    const serverUrl = this.configService.apiUrl.replace('/api/v1', '');
+    const url = `${serverUrl}/api/v1/reportes/pdf?mes=${mes}&anio=${anio}`;
     window.open(url, '_blank');
   }
 }

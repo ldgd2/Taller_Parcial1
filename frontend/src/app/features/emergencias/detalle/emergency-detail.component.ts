@@ -10,6 +10,7 @@ import { SocketService } from '../../../core/services/socket.service';
 import { Subscription } from 'rxjs';
 import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 import * as L from 'leaflet';
+import { ConfigService } from '../../../core/config/config.service';
 
 @Component({
   selector: 'app-emergency-detail',
@@ -343,7 +344,8 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
     private router: Router,
     private api: ApiService,
     private socketService: SocketService,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private configService: ConfigService
   ) {}
 
   ngOnInit() {
@@ -506,7 +508,7 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
     
     if (!path.startsWith('http')) {
       const cleanPath = path.startsWith('uploads/') ? path : `uploads/${path}`;
-      const serverUrl = environment.apiUrl.replace('/api/v1', '');
+      const serverUrl = this.configService.apiUrl.replace('/api/v1', '');
       const base = serverUrl.endsWith('/') ? serverUrl.slice(0, -1) : serverUrl;
       finalUrl = `${base}/${cleanPath}`;
     }
@@ -669,7 +671,7 @@ export class EmergencyDetailComponent implements OnInit, OnDestroy {
   }
 
   downloadFactura() {
-    const url = environment.apiUrl ? environment.apiUrl.replace('/api/v1', '') : 'http://localhost:8000';
+    const url = this.configService.apiUrl ? this.configService.apiUrl.replace('/api/v1', '') : 'http://localhost:8000';
     window.open(`${url}/api/v1/facturacion/${this.emergency.id}/pdf`, '_blank');
   }
 
